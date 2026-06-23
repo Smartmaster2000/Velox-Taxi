@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracking Ride - Velox</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Supabase and Mapbox CDNs -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.css" rel="stylesheet" />
+    <style>
+        .container {
+            max-width: 450px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .driver-card {
+            margin-top: -60px;
+            z-index: 10;
+            position: relative;
+            padding: 20px;
+        }
+        .driver-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .driver-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #333;
+            border: 2px solid var(--primary);
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .stat-box {
+            text-align: center;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+        }
+        #map {
+            height: 400px;
+            width: 100%;
+            border-radius: 16px;
+            margin-bottom: 20px;
+        }
+        /* Rating Modal */
+        .rating-stars {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            font-size: 2rem;
+            cursor: pointer;
+            margin: 20px 0;
+        }
+        .star {
+            color: var(--text-muted);
+            transition: color 0.2s;
+        }
+        .star.active {
+            color: #ffbc00;
+        }
+    </style>
+</head>
+<body>
+    <div class="container animate-fade">
+        <header style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+            <a href="passenger.html" style="color: var(--text-muted); text-decoration: none;">&larr; Back</a>
+            <span id="ride-status-badge" class="glass" style="padding: 4px 12px; font-weight: 700; color: var(--secondary);">SEARCHING</span>
+        </header>
+
+        <!-- Mapbox Map replaces mock map -->
+        <div id="map" class="glass"></div>
+
+        <section class="driver-card glass">
+            <div class="driver-info">
+                <div class="driver-avatar" id="driver-avatar"></div>
+                <div>
+                    <h3 id="driver-name" style="margin-bottom: 4px;">Michael B.</h3>
+                    <div id="driver-car" style="color: var(--text-muted); font-size: 0.9rem;">Toyota Camry • V7 41X8</div>
+                </div>
+                <div style="margin-left: auto; text-align: right;">
+                    <div id="driver-rating" style="font-weight: 700; color: var(--secondary);">4.9 ★</div>
+                    <div id="driver-rides" style="font-size: 0.8rem; color: var(--text-muted);">920 Rides</div>
+                </div>
+            </div>
+
+            <div class="stats">
+                <div class="stat-box">
+                    <div style="color: var(--text-muted); font-size: 0.8rem;">Est. Duration</div>
+                    <div id="ride-duration" style="font-weight: 700; font-size: 1.1rem; color: var(--secondary);">-- mins</div>
+                </div>
+                <div class="stat-box">
+                    <div style="color: var(--text-muted); font-size: 0.8rem;">Est. Distance</div>
+                    <div id="ride-distance" style="font-weight: 700; font-size: 1.1rem; color: var(--secondary);">-- km</div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+                <button class="btn btn-secondary" style="flex: 1;" onclick="alert('Calling driver...')">Call</button>
+                <button class="btn glass" style="flex: 1;" onclick="alert('Chat initialized')">Message</button>
+            </div>
+            
+            <button class="btn btn-danger" id="cancel-btn" style="width: 100%; font-size: 0.9rem;" onclick="cancelRide()">Cancel Ride</button>
+        </section>
+    </div>
+
+    <!-- Rating Overlay Modal -->
+    <div class="modal-overlay" id="rating-overlay">
+        <div class="auth-modal glass animate-fade">
+            <h2 style="text-align: center; margin-bottom: 16px;">Ride Completed!</h2>
+            <p style="text-align: center; color: var(--text-muted);">How was your trip with Michael B.?</p>
+            <div class="rating-stars">
+                <span class="star" onclick="setRating(1)">★</span>
+                <span class="star" onclick="setRating(2)">★</span>
+                <span class="star" onclick="setRating(3)">★</span>
+                <span class="star" onclick="setRating(4)">★</span>
+                <span class="star" onclick="setRating(5)">★</span>
+            </div>
+            <button class="btn btn-primary" style="width: 100%;" onclick="submitRating()">Submit Review</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const rideId = urlParams.get('rideId');
+        
+        let map, passengerMarker, driverMarker;
+        let driverCoords = null;
+        let selectedRating = 5;
+        let currentRide = null;
+
+        document.addEventListener('veloxReady', async () => {
+            checkAuth('passenger');
+            if (!rideId) {
+                alert('No ride ID specified.');
+                window.location.href = 'passenger.html';
+                return;
+            }
+            
+            // 1. Fetch Ride Details
+            await fetchRideDetails();
+            
+            // 2. Initialize Map
+            initMap();
+
+            // 3. Set up Realtime subscriptions
+            subscribeToRideUpdates();
+        });
+
+        async function fetchRideDetails() {
+            try {
+                currentRide = await apiFetch(`/api/rides/${rideId}`);
+                document.getElementById('ride-status-badge').innerText = currentRide.status.toUpperCase();
+                document.getElementById('ride-duration').innerText = `${Math.round(currentRide.duration)} mins`;
+                document.getElementById('ride-distance').innerText = `${currentRide.distance.toFixed(1)} km`;
+
+                if (currentRide.driver) {
+                    // Fetch driver details & stats
+                    const driverData = await apiFetch(`/api/drivers/${currentRide.driver.id}`);
+                    document.getElementById('driver-name').innerText = driverData.profile.name;
+                    document.getElementById('driver-rating').innerText = `${driverData.stats.avgRating} ★`;
+                    document.getElementById('driver-rides').innerText = `${driverData.stats.totalRides} Rides`;
+                    driverCoords = [parseFloat(driverData.longitude), parseFloat(driverData.latitude)];
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function initMap() {
+            if (!currentRide) return;
+
+            const pickupCoords = [parseFloat(currentRide.pickup_lng), parseFloat(currentRide.pickup_lat)];
+            
+            map = new mapboxgl.Map({
+                container: 'map',
+                style: 'mapbox://styles/mapbox/dark-v11',
+                center: pickupCoords,
+                zoom: 14
+            });
+
+            passengerMarker = new mapboxgl.Marker({ color: '#00f5d4' })
+                .setLngLat(pickupCoords)
+                .addTo(map);
+
+            if (driverCoords) {
+                driverMarker = new mapboxgl.Marker({ color: '#9d4edd' })
+                    .setLngLat(driverCoords)
+                    .addTo(map);
+                
+                // Fit bounds
+                const bounds = new mapboxgl.LngLatBounds()
+                    .extend(pickupCoords)
+                    .extend(driverCoords);
+                map.fitBounds(bounds, { padding: 50 });
+            }
+        }
+
+        function subscribeToRideUpdates() {
+            if (!supabaseClient) return;
+
+            // Subscribe to ride updates
+            supabaseClient
+                .channel(`ride_track_${rideId}`)
+                .on('postgres_changes', {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'rides',
+                    filter: `id=eq.${rideId}`
+                }, async (payload) => {
+                    const newRide = payload.new;
+                    document.getElementById('ride-status-badge').innerText = newRide.status.toUpperCase();
+                    
+                    if (newRide.status === 'completed') {
+                        document.getElementById('rating-overlay').style.display = 'flex';
+                    } else if (newRide.status === 'cancelled') {
+                        alert('Your ride has been cancelled.');
+                        window.location.href = 'passenger.html';
+                    } else if (!currentRide.driver_id && newRide.driver_id) {
+                        // Driver just accepted, fetch details
+                        await fetchRideDetails();
+                        if (driverCoords && map) {
+                            if (driverMarker) {
+                                driverMarker.setLngLat(driverCoords);
+                            } else {
+                                driverMarker = new mapboxgl.Marker({ color: '#9d4edd' })
+                                    .setLngLat(driverCoords)
+                                    .addTo(map);
+                            }
+                        }
+                    }
+                })
+                .subscribe();
+
+            // Subscribe to driver location updates (using wildcards or tracking driver specifically)
+            if (currentRide && currentRide.driver_id) {
+                supabaseClient
+                    .channel(`driver_loc_${currentRide.driver_id}`)
+                    .on('postgres_changes', {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: 'drivers',
+                        filter: `id=eq.${currentRide.driver_id}`
+                    }, (payload) => {
+                        const driver = payload.new;
+                        if (driver.longitude && driver.latitude) {
+                            const newCoords = [parseFloat(driver.longitude), parseFloat(driver.latitude)];
+                            if (driverMarker) {
+                                driverMarker.setLngLat(newCoords);
+                            }
+                        }
+                    })
+                    .subscribe();
+            }
+        }
+
+        async function cancelRide() {
+            if (!confirm('Are you sure you want to cancel this ride?')) return;
+            try {
+                await apiFetch(`/api/rides/${rideId}/status`, {
+                    method: 'POST',
+                    body: JSON.stringify({ status: 'cancelled', cancellation_reason: 'Passenger requested' })
+                });
+                alert('Ride cancelled.');
+                window.location.href = 'passenger.html';
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        function setRating(val) {
+            selectedRating = val;
+            const stars = document.querySelectorAll('.star');
+            stars.forEach((star, idx) => {
+                if (idx < val) {
+                    star.classList.add('active');
+                } else {
+                    star.classList.remove('active');
+                }
+            });
+        }
+
+        async function submitRating() {
+            try {
+                await apiFetch(`/api/rides/${rideId}/status`, {
+                    method: 'POST',
+                    body: JSON.stringify({ status: 'completed', rating: selectedRating })
+                });
+                alert('Thank you for rating!');
+                window.location.href = 'passenger.html';
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+    </script>
+</body>
+</html>

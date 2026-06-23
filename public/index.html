@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Velox - Taxi App Suite</title>
+    <link rel="stylesheet" href="styles.css" />
+    <!-- Supabase JS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+    </script>
+    <style>
+        /* ---------- RESET / BASE ---------- */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: #0a0a0c;
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ---------- GLASS / VARIABLES ---------- */
+        :root {
+            --primary: #00f5d4;
+            --primary-glow: rgba(0, 245, 212, 0.25);
+            --secondary: #9d4edd;
+            --glass-bg: rgba(255, 255, 255, 0.04);
+            --glass-border: rgba(255, 255, 255, 0.06);
+            --text-muted: #a0a0b0;
+            --radius: 20px;
+        }
+
+        .glass {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius);
+        }
+
+        /* ---------- HERO / LAYOUT ---------- */
+        .hero {
+            width: 100%;
+            max-width: 1200px;
+            padding: 40px 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            animation: fadeUp 0.8s ease-out;
+        }
+
+        .hero h1 {
+            font-size: 4rem;
+            font-weight: 900;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #ffffff 0%, var(--primary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero .subtitle {
+            color: var(--text-muted);
+            font-size: 1.2rem;
+            margin-top: 8px;
+            max-width: 500px;
+        }
+
+        /* ---------- GRID ---------- */
+        .gateway-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 24px;
+            width: 100%;
+            max-width: 900px;
+            margin-top: 48px;
+        }
+
+        .gateway-card {
+            padding: 32px 24px 28px;
+            text-decoration: none;
+            color: inherit;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius);
+        }
+
+        .gateway-card:hover {
+            transform: translateY(-6px);
+            border-color: var(--primary);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 30px var(--primary-glow);
+        }
+
+        .gateway-card .icon-box {
+            width: 64px;
+            height: 64px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .gateway-card h2 {
+            font-size: 1.4rem;
+            font-weight: 600;
+        }
+
+        .gateway-card p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .gateway-card .btn {
+            width: 100%;
+            padding: 12px 0;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            background: rgba(255, 255, 255, 0.06);
+            color: #fff;
+            margin-top: 8px;
+        }
+
+        .gateway-card .btn-primary {
+            background: var(--primary);
+            color: #0a0a0c;
+        }
+        .gateway-card .btn-primary:hover {
+            background: #00d4b8;
+        }
+
+        .gateway-card .btn-secondary {
+            background: var(--secondary);
+            color: #fff;
+        }
+        .gateway-card .btn-secondary:hover {
+            background: #7b3bbf;
+        }
+
+        .gateway-card .btn-glass {
+            background: rgba(255, 255, 255, 0.06);
+        }
+        .gateway-card .btn-glass:hover {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        /* ---------- USER BADGE ---------- */
+        .user-badge {
+            position: fixed;
+            top: 20px;
+            right: 24px;
+            padding: 10px 18px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            z-index: 100;
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 40px;
+            font-size: 0.9rem;
+        }
+
+        .user-badge .user-name {
+            color: #fff;
+            font-weight: 500;
+        }
+
+        .user-badge .user-role {
+            color: var(--primary);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.7rem;
+            letter-spacing: 0.04em;
+            background: rgba(0, 245, 212, 0.12);
+            padding: 2px 10px;
+            border-radius: 20px;
+        }
+
+        .user-badge .btn-logout {
+            background: rgba(255, 255, 255, 0.06);
+            border: none;
+            color: #ff6b6b;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .user-badge .btn-logout:hover {
+            background: rgba(255, 107, 107, 0.15);
+        }
+
+        /* ---------- AUTH MODAL ---------- */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .auth-modal {
+            background: #1a1a2e;
+            padding: 36px 32px 32px;
+            border-radius: 28px;
+            max-width: 420px;
+            width: 92%;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.8);
+        }
+
+        .auth-modal h2 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+            color: #fff;
+        }
+
+        .auth-modal .sub {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 24px;
+        }
+
+        .auth-modal .input-group {
+            margin-bottom: 16px;
+            text-align: left;
+        }
+
+        .auth-modal .input-group label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .auth-modal .input-field {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.04);
+            color: #fff;
+            font-size: 1rem;
+            transition: border 0.2s;
+        }
+
+        .auth-modal .input-field:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .auth-modal .btn-primary {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 12px;
+            background: var(--primary);
+            color: #0a0a0c;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 4px;
+        }
+
+        .auth-modal .btn-primary:hover {
+            background: #00d4b8;
+        }
+
+        .auth-modal .btn-secondary {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.06);
+            color: #fff;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-top: 8px;
+        }
+
+        .auth-modal .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .auth-modal .auth-message {
+            margin-top: 14px;
+            font-size: 0.9rem;
+            text-align: center;
+            min-height: 24px;
+        }
+
+        .auth-modal .auth-message.error {
+            color: #ff6b6b;
+        }
+        .auth-modal .auth-message.success {
+            color: var(--primary);
+        }
+
+        .auth-modal .switch-link {
+            margin-top: 18px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .auth-modal .switch-link a {
+            color: var(--primary);
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .auth-modal .switch-link a:hover {
+            text-decoration: underline;
+        }
+
+        /* ---------- UTILITY ---------- */
+        .hidden {
+            display: none !important;
+        }
+
+        @keyframes fadeUp {
+            0% {
+                opacity: 0;
+                transform: translateY(24px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ---------- RESPONSIVE ---------- */
+        @media (max-width: 600px) {
+            .hero h1 {
+                font-size: 2.8rem;
+            }
+            .gateway-grid {
+                grid-template-columns: 1fr;
+            }
+            .user-badge {
+                top: 12px;
+                right: 12px;
+                padding: 6px 14px;
+                font-size: 0.8rem;
+            }
+            .auth-modal {
+                padding: 28px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ========================================================= -->
+    <!-- USER BADGE (fixed top-right)                               -->
+    <!-- ========================================================= -->
+    <div id="userBadge" class="user-badge hidden">
+        <span class="user-name" id="userName">Guest</span>
+        <span class="user-role" id="userRole">—</span>
+        <button class="btn-logout" id="logoutBtn" onclick="handleLogout()">Logout</button>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- HERO / GATEWAY                                            -->
+    <!-- ========================================================= -->
+    <main class="hero">
+
+        <h1>VELOX</h1>
+        <p class="subtitle">The next generation of taxi management and ride-hailing.</p>
+
+        <div class="gateway-grid">
+
+            <!-- PASSENGER CARD -->
+            <div class="gateway-card" onclick="goTo('passenger')">
+                <div class="icon-box">📍</div>
+                <h2>Passenger App</h2>
+                <p>Book rides, track drivers and pay seamlessly.</p>
+                <span class="btn btn-primary">Enter as Rider</span>
+            </div>
+
+            <!-- DRIVER CARD -->
+            <div class="gateway-card" onclick="goTo('driver')">
+                <div class="icon-box">🚗</div>
+                <h2>Driver App</h2>
+                <p>Manage your status, accept rides and track earnings.</p>
+                <span class="btn btn-secondary">Enter as Driver</span>
+            </div>
+
+            <!-- ADMIN CARD -->
+            <div class="gateway-card" onclick="goTo('admin')">
+                <div class="icon-box">📊</div>
+                <h2>Admin Panel</h2>
+                <p>Complete fleet oversight and business analytics.</p>
+                <span class="btn btn-glass">Enter Dashboard</span>
+            </div>
+
+        </div>
+
+        <footer style="margin-top: 64px; color: var(--text-muted); font-size: 0.8rem;">
+            &copy; 2026 Velox Technologies Inc.
+        </footer>
+    </main>
+
+    <!-- ========================================================= -->
+    <!-- AUTH MODAL                                               -->
+    <!-- ========================================================= -->
+    <div class="modal-overlay" id="authModal">
+        <div class="auth-modal">
+
+            <h2 id="authTitle">Welcome back</h2>
+            <p class="sub" id="authSub">Log in to your account to continue.</p>
+
+            <!-- LOGIN FORM -->
+            <form id="loginForm" onsubmit="handleAuthSubmit(event, 'login')">
+                <div class="input-group">
+                    <label>Email Address</label>
+                    <input type="email" id="loginEmail" class="input-field" required />
+                </div>
+                <div class="input-group">
+                    <label>Password</label>
+                    <input type="password" id="loginPassword" class="input-field" required />
+                </div>
+                <button type="submit" class="btn-primary">Login</button>
+            </form>
+
+            <!-- REGISTER FORM -->
+            <form id="registerForm" class="hidden" onsubmit="handleAuthSubmit(event, 'register')">
+                <div class="input-group">
+                    <label>Full Name</label>
+                    <input type="text" id="regName" class="input-field" required />
+                </div>
+                <div class="input-group">
+                    <label>Email Address</label>
+                    <input type="email" id="regEmail" class="input-field" required />
+                </div>
+                <div class="input-group">
+                    <label>Password</label>
+                    <input type="password" id="regPassword" class="input-field" required />
+                </div>
+                <div class="input-group">
+                    <label>I want to register as</label>
+                    <select id="regRole" class="input-field">
+                        <option value="passenger">Passenger</option>
+                        <option value="driver">Driver</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary">Create Account</button>
+            </form>
+
+            <!-- SWITCH LINK -->
+            <div class="switch-link" id="switchLink">
+                Don't have an account? <a id="switchAction" onclick="showRegister()">Sign up</a>
+            </div>
+
+            <!-- MESSAGE -->
+            <div class="auth-message" id="authMessage"></div>
+
+            <!-- CANCEL / CLOSE -->
+            <button class="btn-secondary" onclick="closeAuthModal()">Cancel</button>
+
+        </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- SCRIPTS                                                   -->
+    <!-- ========================================================= -->
+    <script src="app.js"></script>
+    <script>
+        // --------------------------------------------------------------
+        // AUTH MODAL CONTROLS
+        // --------------------------------------------------------------
+
+        function openAuthModal() {
+            document.getElementById('authModal').classList.add('active');
+            // reset to login view
+            showLogin();
+        }
+
+        function closeAuthModal() {
+            document.getElementById('authModal').classList.remove('active');
+            // clear message
+            document.getElementById('authMessage').textContent = '';
+            document.getElementById('authMessage').className = 'auth-message';
+        }
+
+        function showLogin() {
+            document.getElementById('loginForm').classList.remove('hidden');
+            document.getElementById('registerForm').classList.add('hidden');
+            document.getElementById('authTitle').textContent = 'Welcome back';
+            document.getElementById('authSub').textContent = 'Log in to your account to continue.';
+            document.getElementById('switchAction').textContent = 'Sign up';
+            document.getElementById('switchAction').onclick = showRegister;
+            document.getElementById('switchLink').innerHTML =
+                `Don't have an account? <a id="switchAction" onclick="showRegister()">Sign up</a>`;
+            document.getElementById('authMessage').textContent = '';
+            document.getElementById('authMessage').className = 'auth-message';
+        }
+
+        function showRegister() {
+            document.getElementById('loginForm').classList.add('hidden');
+            document.getElementById('registerForm').classList.remove('hidden');
+            document.getElementById('authTitle').textContent = 'Create account';
+            document.getElementById('authSub').textContent = 'Join the Velox fleet today.';
+            document.getElementById('switchLink').innerHTML =
+                `Already have an account? <a id="switchAction" onclick="showLogin()">Log in</a>`;
+            document.getElementById('authMessage').textContent = '';
+            document.getElementById('authMessage').className = 'auth-message';
+        }
+
+        // --------------------------------------------------------------
+        // AUTH FORM SUBMIT
+        // --------------------------------------------------------------
+
+        async function handleAuthSubmit(e, type) {
+            e.preventDefault();
+
+            const msg = document.getElementById('authMessage');
+            msg.textContent = '';
+            msg.className = 'auth-message';
+
+            try {
+                if (type === 'login') {
+                    const email = document.getElementById('loginEmail').value.trim();
+                    const password = document.getElementById('loginPassword').value;
+
+                    if (!email || !password) {
+                        msg.textContent = 'Please fill in all fields.';
+                        msg.className = 'auth-message error';
+                        return;
+                    }
+
+                    const ok = await loginUser(email, password);
+                    if (ok) {
+                        closeAuthModal();
+                        // the loginUser function redirects after 1s
+                    } else {
+                        // error already shown by loginUser
+                    }
+
+                } else if (type === 'register') {
+                    const name = document.getElementById('regName').value.trim();
+                    const email = document.getElementById('regEmail').value.trim();
+                    const password = document.getElementById('regPassword').value;
+                    const role = document.getElementById('regRole').value;
+
+                    if (!name || !email || !password || !role) {
+                        msg.textContent = 'Please fill in all fields.';
+                        msg.className = 'auth-message error';
+                        return;
+                    }
+
+                    const ok = await registerUser(email, password, name, role);
+                    if (ok) {
+                        msg.textContent = '✅ Registration successful! Please log in.';
+                        msg.className = 'auth-message success';
+                        showLogin();
+                        document.getElementById('loginEmail').value = email;
+                        document.getElementById('loginPassword').value = '';
+                    } else {
+                        // error already shown by registerUser
+                    }
+                }
+            } catch (err) {
+                msg.textContent = err.message || 'Something went wrong.';
+                msg.className = 'auth-message error';
+                console.error(err);
+            }
+        }
+
+        // --------------------------------------------------------------
+        // LOGOUT
+        // --------------------------------------------------------------
+
+        function handleLogout() {
+            clearUser(); // from app.js
+        }
+
+        // --------------------------------------------------------------
+        // OVERRIDE goTo IF NO USER → OPEN AUTH MODAL
+        // --------------------------------------------------------------
+
+        // The goTo function is defined in app.js.
+        // We'll wrap it so that if no user is found, we open the auth modal.
+        const originalGoTo = window.goTo;
+        window.goTo = function(app) {
+            const user = getUserFromStorage();
+            if (!user) {
+                // store the intended destination so we can redirect after login
+                window.__pendingApp = app;
+                openAuthModal();
+                // update modal to show login
+                showLogin();
+                return;
+            }
+            // otherwise call the original goTo
+            originalGoTo(app);
+        };
+
+        // --------------------------------------------------------------
+        // INIT
+        // --------------------------------------------------------------
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // If user is already logged in, show badge
+            const user = getUserFromStorage();
+            if (user) {
+                document.getElementById('userName').textContent = user.full_name || user.email || 'User';
+                const role = user.role || 'passenger';
+                document.getElementById('userRole').textContent = role.toUpperCase();
+                document.getElementById('userBadge').classList.remove('hidden');
+            } else {
+                document.getElementById('userBadge').classList.add('hidden');
+            }
+
+            // if auth modal is closed by clicking outside
+            document.getElementById('authModal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeAuthModal();
+                }
+            });
+        });
+
+        console.log('✅ index.html loaded');
+    </script>
+</body>
+</html>

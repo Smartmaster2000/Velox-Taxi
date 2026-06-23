@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Velox Driver</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.css" rel="stylesheet" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #0a0a1a; color: #fff; }
+        .container { max-width: 450px; margin: 0 auto; padding: 20px; }
+        .status-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 16px; background: #1a1a3a; border-radius: 16px; }
+        .online-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        .btn-primary { background: #00f5d4; color: #0a0a1a; }
+        .btn-primary:hover { background: #00d4b8; }
+        .btn-secondary { background: #333; color: #fff; }
+        .btn-secondary:hover { background: #555; }
+        .btn-danger { background: #ff4444; color: #fff; }
+        .btn-success { background: #00f5d4; color: #0a0a1a; }
+        .earnings-card { padding: 24px; text-align: center; background: #1a1a3a; border-radius: 16px; margin-bottom: 20px; }
+        .earnings-card .amount { font-size: 2.5rem; font-weight: 800; color: #00f5d4; }
+        .earnings-card .stats { display: flex; justify-content: space-around; margin-top: 20px; }
+        .earnings-card .stats div { text-align: center; cursor: pointer; }
+        .earnings-card .stats .number { font-size: 1.5rem; font-weight: 700; }
+        .earnings-card .stats .label { color: #888; font-size: 0.8rem; }
+        #map { height: 350px; width: 100%; border-radius: 16px; margin-bottom: 20px; }
+        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; z-index: 90; }
+        .modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; max-width: 400px; max-height: 80vh; overflow-y: auto; background: #1a1a3a; padding: 30px; border-radius: 20px; z-index: 100; display: none; border: 1px solid #333; }
+        .modal h3 { color: #00f5d4; margin-bottom: 15px; }
+        .modal .detail { display: flex; justify-content: space-between; margin: 10px 0; }
+        .modal .detail .label { color: #888; }
+        .btn-group { display: flex; gap: 12px; margin-top: 20px; }
+        .btn-group button { flex: 1; padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        .btn-decline { background: #333; color: #fff; }
+        .btn-accept { background: #00f5d4; color: #0a0a1a; }
+        #active-ride-panel { display: none; padding: 20px; margin-top: 20px; background: #1a1a3a; border-radius: 16px; }
+        #active-ride-panel .ride-detail { margin: 8px 0; font-size: 0.9rem; }
+        .hidden { display: none !important; }
+        .history-item { padding: 12px; border-bottom: 1px solid #333; }
+        .status-badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
+        .status-online { background: rgba(0, 245, 212, 0.1); color: #00f5d4; }
+        .status-busy { background: rgba(255, 188, 0, 0.1); color: #ffbc00; }
+        .status-offline { background: rgba(255, 68, 68, 0.1); color: #ff4444; }
+        .input-field { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; }
+        #nav-instructions { background: #00f5d4; color: #0a0a1a; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-weight: bold; display: none; }
+        .btn-icon { display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .user-avatar { width: 40px; height: 40px; border-radius: 50%; background: #333; display: flex; justify-content: center; align-items: center; cursor: pointer; font-weight: bold; font-size: 1.2rem; color: #fff; }
+    </style>
+</head>
+<body>
+    <div class="container animate-fade">
+        <header class="status-header">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div class="user-avatar" id="avatar" onclick="showProfile()">D</div>
+                <div>
+                    <span class="online-dot" id="status-dot" style="background: #ff4444;"></span>
+                    <span id="status-text" style="font-weight: 600;">OFFLINE</span>
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <button class="btn btn-primary" onclick="toggleStatus()" id="status-btn">Ga Online</button>
+                <button class="btn btn-danger" onclick="handleLogout()" id="logout-btn">Uitloggen</button>
+            </div>
+        </header>
+
+        <section class="earnings-card" id="stats-section">
+            <div style="color: #888; font-size: 0.9rem; margin-bottom: 8px;">Totale Inkomsten</div>
+            <div class="amount" id="earnings-val">€0.00</div>
+            <div style="color: #00f5d4; font-size: 0.8rem; margin-bottom: 15px;">Inkomsten Vandaag: <span id="earnings-today">€0.00</span></div>
+            <div class="stats">
+                <div onclick="showHistory()" style="cursor: pointer;">
+                    <div class="number" id="rides-count">0</div>
+                    <div class="label" style="text-decoration: underline;">Voltooide Ritten</div>
+                </div>
+                <div>
+                    <div class="number" id="rating-val">5.0</div>
+                    <div class="label">Beoordeling</div>
+                </div>
+            </div>
+        </section>
+
+        <div id="map"></div>
+
+        <div id="active-ride-panel">
+            <h3 id="job-title">🚗 Route naar Ophaallocatie</h3>
+            <div id="nav-instructions">⬆️ Volg de navigatie op de kaart...</div>
+            <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <div>
+                        <span style="color: #888; font-size: 0.9rem; display: block;">Passagier</span>
+                        <strong id="active-passenger" style="font-size: 1.1rem;">--</strong>
+                    </div>
+                    <button class="btn btn-secondary btn-icon" id="call-passenger-btn" onclick="callPassenger()" style="padding: 8px 12px; font-size: 0.9rem;">📞 Bel Passagier</button>
+                </div>
+                <div style="display: flex; justify-content: space-between; border-top: 1px solid #333; padding-top: 10px;">
+                    <span style="color: #888; font-size: 0.9rem;">Rit Prijs</span>
+                    <strong id="active-price" style="color: #00f5d4; font-size: 1.1rem;">--</strong>
+                </div>
+            </div>
+            <div class="ride-detail"><strong>📍 Van:</strong> <span id="ride-from">Ophaallocatie</span></div>
+            <div class="ride-detail"><strong>🏁 Naar:</strong> <span id="ride-to">Bestemming</span></div>
+            <button class="btn btn-success" id="job-action-btn" style="width: 100%; margin-top: 15px; padding: 15px; font-size: 1.1rem;" onclick="handleJobAction()">Aangekomen bij Ophaallocatie</button>
+        </div>
+
+        <div class="overlay" id="overlay" onclick="closeModals()"></div>
+
+        <div class="modal" id="request-modal">
+            <h3>📍 Nieuw Ritverzoek</h3>
+            <div class="detail"><span class="label">Ophaallocatie</span><span id="req-pickup">--</span></div>
+            <div class="detail"><span class="label">Bestemming</span><span id="req-dropoff">--</span></div>
+            <div class="detail"><span class="label">Afstand</span><span id="req-dist">--</span></div>
+            <div class="detail"><span class="label">Rit Prijs</span><span id="req-price" style="color: #00f5d4; font-weight: bold; font-size: 1.4rem;">--</span></div>
+            <div class="btn-group">
+                <button class="btn-decline" onclick="rejectRequest()">Weigeren</button>
+                <button class="btn-accept" onclick="acceptRequest()">Accepteren</button>
+            </div>
+        </div>
+
+        <div class="modal" id="profile-modal">
+            <h3>Chauffeur Profiel</h3>
+            <label style="font-size: 0.8rem; color: #888;">Volledige Naam</label>
+            <input type="text" id="prof-name" class="input-field" placeholder="Volledige Naam">
+            <label style="font-size: 0.8rem; color: #888;">Telefoonnummer</label>
+            <input type="text" id="prof-phone" class="input-field" placeholder="Telefoonnummer">
+            <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                <div style="font-size: 0.8rem; color: #888; margin-bottom: 5px;">Voertuig Informatie</div>
+                <strong id="prof-vehicle">--</strong>
+            </div>
+            <button class="btn btn-primary" onclick="saveProfile()">Opslaan</button>
+        </div>
+
+        <div class="modal" id="history-modal">
+            <h3>Ritgeschiedenis</h3>
+            <div id="history-list" style="margin-top: 15px; max-height: 50vh; overflow-y: auto;"></div>
+            <button class="btn btn-secondary" style="width: 100%; margin-top: 20px;" onclick="closeModals()">Sluiten</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        // ✅ This function gets the user and token correctly
+        function getAuthToken() {
+            const userData = localStorage.getItem('velox_user');
+            if (!userData) return null;
+            try {
+                const user = JSON.parse(userData);
+                return user?.session?.access_token || user?.token || null;
+            } catch (e) {
+                console.error('Error parsing user:', e);
+                return null;
+            }
+        }
+
+        function getCurrentUser() {
+            const userData = localStorage.getItem('velox_user');
+            if (!userData) return null;
+            try {
+                return JSON.parse(userData);
+            } catch (e) {
+                console.error('Error parsing user:', e);
+                return null;
+            }
+        }
+
+        let isOnline = false;
+        let map, driverMarker, destinationMarker;
+        let driverCoords = null;
+        let watchId = null;
+        let activeRideChannel = null;
+        let activeRideStateChannel = null;
+        let currentRequest = null;
+        let activeRide = null;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const user = getCurrentUser();
+            if (user && user.role === 'driver') {
+                await loadConfig();
+                await fetchDriverStats(user.id);
+                document.getElementById('avatar').innerText = user.name ? user.name.charAt(0).toUpperCase() : 'D';
+                // ✅ Auto go online for testing
+                if (!isOnline) {
+                    toggleOnlineState(true);
+                }
+            } else {
+                window.location.href = '/index.html';
+            }
+        });
+
+        async function loadConfig() {
+            try {
+                const res = await fetch('/api/config');
+                const config = await res.json();
+                if (config.mapboxToken) mapboxgl.accessToken = config.mapboxToken;
+                if (config.supabaseUrl && config.supabaseAnonKey) {
+                    const user = getCurrentUser();
+                    const token = user?.session?.access_token || user?.token || '';
+                    window.supabaseClient = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey, {
+                        global: { headers: { Authorization: `Bearer ${token}` } }
+                    });
+                }
+                initMap();
+            } catch (err) { console.error(err); }
+        }
+
+        async function fetchDriverStats(driverId) {
+            try {
+                if (!window.supabaseClient) return;
+                const token = getAuthToken();
+                
+                const res = await fetch(`/api/drivers/${driverId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.status === 'online' || data.status === 'busy') toggleOnlineState(true);
+                    document.getElementById('rating-val').innerText = data.stats?.avgRating || '5.0';
+                }
+                
+                const { data: rides, error } = await window.supabaseClient
+                    .from('rides')
+                    .select('price, platform_fee, net_earnings, created_at, rating')
+                    .eq('driver_id', driverId)
+                    .eq('status', 'completed');
+                if (error) throw error;
+                
+                let totalNet = 0, todayNet = 0;
+                const today = new Date(); today.setHours(0,0,0,0);
+                rides.forEach(r => {
+                    const net = parseFloat(r.net_earnings || (r.price * 0.92));
+                    totalNet += net;
+                    if (new Date(r.created_at) >= today) todayNet += net;
+                });
+                document.getElementById('rides-count').innerText = rides.length;
+                document.getElementById('earnings-val').innerText = `€${totalNet.toFixed(2)}`;
+                document.getElementById('earnings-today').innerText = `€${todayNet.toFixed(2)}`;
+            } catch (err) { console.error(err); }
+        }
+
+        function initMap() {
+            const defaultCoords = [4.8952, 52.3702];
+            map = new mapboxgl.Map({
+                container: 'map', style: 'mapbox://styles/mapbox/dark-v11', center: defaultCoords, zoom: 14
+            });
+            driverMarker = new mapboxgl.Marker({ color: '#00f5d4' }).setLngLat(defaultCoords).addTo(map);
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    driverCoords = [pos.coords.longitude, pos.coords.latitude];
+                    map.setCenter(driverCoords);
+                    driverMarker.setLngLat(driverCoords);
+                });
+            }
+        }
+
+        function toggleStatus() { toggleOnlineState(!isOnline); }
+
+        async function toggleOnlineState(online) {
+            isOnline = online;
+            const dot = document.getElementById('status-dot'), text = document.getElementById('status-text');
+            const btn = document.getElementById('status-btn');
+            
+            if (isOnline) {
+                dot.style.background = '#00f5d4'; text.innerHTML = 'ONLINE';
+                btn.innerHTML = 'Ga Offline'; btn.className = 'btn btn-secondary';
+                startLocationTracking(); subscribeToRequests();
+            } else {
+                dot.style.background = '#ff4444'; text.innerHTML = 'OFFLINE';
+                btn.innerHTML = 'Ga Online'; btn.className = 'btn btn-primary';
+                stopLocationTracking(); unsubscribeFromRequests();
+            }
+            if (driverCoords) {
+                try {
+                    const token = getAuthToken();
+                    await fetch('/api/drivers/location', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                        body: JSON.stringify({ latitude: driverCoords[1], longitude: driverCoords[0], status: isOnline ? 'online' : 'offline' })
+                    });
+                } catch (e) { console.error(e); }
+            }
+        }
+
+        function startLocationTracking() {
+            if (navigator.geolocation) {
+                watchId = navigator.geolocation.watchPosition(async (pos) => {
+                    driverCoords = [pos.coords.longitude, pos.coords.latitude];
+                    if (driverMarker) driverMarker.setLngLat(driverCoords);
+                    const token = getAuthToken();
+                    fetch('/api/drivers/location', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                        body: JSON.stringify({ latitude: driverCoords[1], longitude: driverCoords[0] })
+                    }).catch(()=>{});
+                }, err => {}, { enableHighAccuracy: true });
+            }
+        }
+
+        function stopLocationTracking() {
+            if (watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+        }
+
+        function subscribeToRequests() {
+            if (!window.supabaseClient) return;
+            const user = getCurrentUser();
+            
+            activeRideChannel = window.supabaseClient.channel('driver_requests')
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'rides' }, payload => {
+                    const ride = payload.new;
+                    console.log('🔥 New ride detected:', ride);
+                    if (ride.status === 'requested' && !activeRide) showRequestModal(ride);
+                }).subscribe();
+                
+            activeRideStateChannel = window.supabaseClient.channel('driver_active_ride')
+                .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rides', filter: `driver_id=eq.${user.id}` }, payload => {
+                    const ride = payload.new;
+                    if (ride.status === 'cancelled' && activeRide && activeRide.id === ride.id) {
+                        alert("De passagier heeft de rit geannuleerd.");
+                        resetJobUI();
+                    }
+                }).subscribe();
+        }
+
+        function unsubscribeFromRequests() {
+            if (activeRideChannel) { window.supabaseClient.removeChannel(activeRideChannel); activeRideChannel = null; }
+            if (activeRideStateChannel) { window.supabaseClient.removeChannel(activeRideStateChannel); activeRideStateChannel = null; }
+        }
+
+        function showRequestModal(ride) {
+            currentRequest = ride;
+            const netEarnings = ride.price * 0.92;
+            document.getElementById('req-pickup').innerText = (ride.pickup_address || '').substring(0,25) + '...';
+            document.getElementById('req-dropoff').innerText = (ride.dropoff_address || '').substring(0,25) + '...';
+            document.getElementById('req-dist').innerText = ride.distance ? `${parseFloat(ride.distance).toFixed(1)} km` : '--';
+            document.getElementById('req-price').innerText = `€${netEarnings.toFixed(2)}`;
+            document.getElementById('overlay').style.display = 'block';
+            document.getElementById('request-modal').style.display = 'block';
+        }
+
+        function closeModals() {
+            document.getElementById('overlay').style.display = 'none';
+            document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+        }
+
+        function rejectRequest() { closeModals(); currentRequest = null; }
+
+        async function acceptRequest() {
+            if (!currentRequest) return;
+            try {
+                const token = getAuthToken();
+                
+                if (!token) {
+                    alert('❌ Geen token gevonden. Log opnieuw in.');
+                    return;
+                }
+                
+                console.log('📤 Accepting ride:', currentRequest.id);
+                console.log('🔑 Token:', token.substring(0, 20) + '...');
+                
+                const res = await fetch(`/api/rides/status`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        ride_id: currentRequest.id,
+                        status: 'accepted'
+                    })
+                });
+                
+                const data = await res.json();
+                console.log('📥 Accept response:', data);
+                
+                if (!res.ok) {
+                    console.error('❌ Accept error:', data);
+                    throw new Error(data.error || 'Failed to accept');
+                }
+                
+                activeRide = currentRequest;
+                activeRide.status = 'accepted';
+                closeModals();
+                enterActiveJobMode();
+            } catch (err) {
+                alert('❌ Failed to accept: ' + err.message);
+                console.error('Accept error:', err);
+                closeModals();
+            }
+        }
+
+        function enterActiveJobMode() {
+            document.getElementById('stats-section').style.display = 'none';
+            document.getElementById('active-ride-panel').style.display = 'block';
+            
+            const netEarnings = activeRide.price * 0.92;
+            document.getElementById('job-title').innerText = '🚗 Route naar Ophaallocatie';
+            document.getElementById('active-passenger').innerText = activeRide.passenger_name || 'Passenger';
+            document.getElementById('active-price').innerText = `€${netEarnings.toFixed(2)}`;
+            document.getElementById('ride-from').innerText = activeRide.pickup_address;
+            document.getElementById('ride-to').innerText = activeRide.dropoff_address;
+            
+            if (!activeRide.passenger_phone) {
+                document.getElementById('call-passenger-btn').style.display = 'none';
+            } else {
+                document.getElementById('call-passenger-btn').style.display = 'block';
+            }
+            
+            const btn = document.getElementById('job-action-btn');
+            btn.innerText = 'Aangekomen bij Ophaallocatie';
+            btn.className = 'btn btn-success';
+            document.getElementById('nav-instructions').style.display = 'block';
+            document.getElementById('nav-instructions').innerText = '📍 Volg de navigatie naar de ophaallocatie...';
+            calculateJobRoute([parseFloat(activeRide.pickup_lng), parseFloat(activeRide.pickup_lat)]);
+        }
+
+        function callPassenger() {
+            if (activeRide && activeRide.passenger_phone) {
+                window.location.href = `tel:${activeRide.passenger_phone}`;
+            }
+        }
+
+        async function handleJobAction() {
+            const btn = document.getElementById('job-action-btn');
+            const token = getAuthToken();
+
+            if (!activeRide) {
+                console.error('❌ No active ride');
+                return;
+            }
+
+            console.log('📊 Current ride status:', activeRide.status);
+
+            if (activeRide.status === 'accepted') {
+                console.log('📍 Marking ride as enroute...');
+                
+                const res = await fetch(`/api/rides/status`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        ride_id: activeRide.id,
+                        status: 'enroute'
+                    })
+                });
+
+                const data = await res.json();
+                console.log('📥 Enroute response:', data);
+
+                if (res.ok) {
+                    activeRide.status = 'enroute';
+                    document.getElementById('job-title').innerText = '🛣️ Route naar Bestemming';
+                    document.getElementById('nav-instructions').innerText = '🏁 Volg de navigatie naar de eindbestemming...';
+                    btn.innerText = 'Rit Voltooien';
+                    btn.className = 'btn btn-primary';
+                    calculateJobRoute([parseFloat(activeRide.dropoff_lng), parseFloat(activeRide.dropoff_lat)]);
+                } else {
+                    alert('❌ Fout bij starten rit: ' + data.error);
+                }
+            }
+            else if (activeRide.status === 'enroute') {
+                console.log('✅ Completing ride...');
+                
+                const res = await fetch(`/api/rides/status`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        ride_id: activeRide.id,
+                        status: 'completed'
+                    })
+                });
+
+                const data = await res.json();
+                console.log('📥 Complete response:', data);
+
+                if (res.ok) {
+                    alert('✅ Rit succesvol voltooid!');
+                    resetJobUI();
+                    const user = getCurrentUser();
+                    await fetchDriverStats(user.id);
+                } else {
+                    alert('❌ Fout bij voltooien rit: ' + data.error);
+                }
+            }
+        }
+
+        function resetJobUI() {
+            document.getElementById('active-ride-panel').style.display = 'none';
+            document.getElementById('nav-instructions').style.display = 'none';
+            document.getElementById('stats-section').style.display = 'block';
+            if (map.getLayer('job_route')) map.removeLayer('job_route');
+            if (map.getSource('job_route')) map.removeSource('job_route');
+            if (destinationMarker) destinationMarker.remove();
+            activeRide = null;
+        }
+
+        async function calculateJobRoute(destination) {
+            if (!driverCoords || !destination) return;
+            try {
+                const res = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${driverCoords[0]},${driverCoords[1]};${destination[0]},${destination[1]}?geometries=geojson&steps=true&access_token=${mapboxgl.accessToken}`);
+                const data = await res.json();
+                if (data.routes && data.routes.length > 0) {
+                    const route = data.routes[0];
+                    drawJobRoute(route.geometry);
+                    if (route.legs[0] && route.legs[0].summary) {
+                        document.getElementById('nav-instructions').innerText = `Via ${route.legs[0].summary} (${Math.ceil(route.duration / 60)} min)`;
+                    }
+                    if (destinationMarker) destinationMarker.remove();
+                    destinationMarker = new mapboxgl.Marker({ color: '#ff5d8f' }).setLngLat(destination).addTo(map);
+                    map.fitBounds(new mapboxgl.LngLatBounds().extend(driverCoords).extend(destination), { padding: 50 });
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        function drawJobRoute(geometry) {
+            if (map.getSource('job_route')) { map.getSource('job_route').setData(geometry); }
+            else {
+                map.addSource('job_route', { 'type': 'geojson', 'data': geometry });
+                map.addLayer({ 'id': 'job_route', 'type': 'line', 'source': 'job_route', 'paint': { 'line-color': '#00f5d4', 'line-width': 5 } });
+            }
+        }
+
+        async function showProfile() {
+            const token = getAuthToken();
+            try {
+                const res = await fetch('/api/users/profile', { headers: { 'Authorization': `Bearer ${token}` }});
+                const data = await res.json();
+                document.getElementById('prof-name').value = data.name || '';
+                document.getElementById('prof-phone').value = data.phone || '';
+                document.getElementById('prof-vehicle').innerText = data.vehicle_model ? `${data.vehicle_model} • ${data.vehicle_plate}` : 'Niet toegewezen';
+                document.getElementById('overlay').style.display = 'block';
+                document.getElementById('profile-modal').style.display = 'block';
+            } catch (e) { alert("Error loading profile"); }
+        }
+
+        async function saveProfile() {
+            const token = getAuthToken();
+            const name = document.getElementById('prof-name').value;
+            const phone = document.getElementById('prof-phone').value;
+            try {
+                await fetch('/api/users/profile', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ name, phone })
+                });
+                alert("Profiel opgeslagen!");
+                closeModals();
+            } catch (e) { alert("Error saving profile"); }
+        }
+
+        async function showHistory() {
+            const user = getCurrentUser();
+            try {
+                const { data: rides, error } = await window.supabaseClient
+                    .from('ride_details_with_users')
+                    .select('*')
+                    .eq('driver_id', user.id)
+                    .eq('status', 'completed')
+                    .order('created_at', { ascending: false });
+                if (error) throw error;
+                
+                const list = document.getElementById('history-list');
+                list.innerHTML = '';
+                if (!rides || rides.length === 0) list.innerHTML = '<div style="color:#888; text-align:center;">Nog geen ritten voltooid</div>';
+                
+                rides.forEach(r => {
+                    const net = parseFloat(r.net_earnings || (r.price * 0.92));
+                    list.innerHTML += `
+                    <div class="history-item">
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                            <strong style="color:var(--secondary);">Verdiensten: €${net.toFixed(2)}</strong>
+                            <span style="font-size:0.8rem; color:#888;">${new Date(r.created_at).toLocaleDateString()}</span>
+                        </div>
+                        <div style="font-size:0.8rem; margin-bottom:5px;">Passagier: ${r.passenger_name || 'N/A'} (★ ${r.rating || '-'})</div>
+                        <div style="font-size:0.8rem; color:#aaa; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">P: ${r.pickup_address}</div>
+                        <div style="font-size:0.8rem; color:#aaa; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">D: ${r.dropoff_address}</div>
+                    </div>`;
+                });
+                document.getElementById('overlay').style.display = 'block';
+                document.getElementById('history-modal').style.display = 'block';
+            } catch (e) { alert("Error loading history"); }
+        }
+
+        function handleLogout() {
+            localStorage.removeItem('velox_user');
+            localStorage.removeItem('velox_session');
+            window.location.href = '/index.html';
+        }
+
+        window.toggleStatus = toggleStatus;
+        window.rejectRequest = rejectRequest;
+        window.acceptRequest = acceptRequest;
+        window.handleJobAction = handleJobAction;
+        window.showProfile = showProfile;
+        window.saveProfile = saveProfile;
+        window.showHistory = showHistory;
+        window.closeModals = closeModals;
+        window.handleLogout = handleLogout;
+        window.callPassenger = callPassenger;
+    </script>
+</body>
+</html>

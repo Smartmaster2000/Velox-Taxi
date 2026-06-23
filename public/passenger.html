@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Velox Passagier</title>
+    
+    <!-- Supabase and Mapbox CDNs -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.css" rel="stylesheet" />
+    <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.min.js"></script>
+    <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.css" type="text/css" />
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #0a0a1a; color: #fff; }
+        .container { max-width: 450px; margin: 0 auto; padding: 20px; }
+        
+        /* Auth Modal */
+        .auth-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); display: flex; align-items: center; justify-content: center; z-index: 999; }
+        .auth-box { background: #1a1a3a; padding: 40px; border-radius: 20px; width: 90%; max-width: 400px; }
+        .auth-box h2 { color: #00f5d4; margin-bottom: 20px; text-align: center; }
+        .auth-box input, .auth-box select { width: 100%; padding: 14px; margin-bottom: 12px; border-radius: 10px; border: 1px solid #333; background: #0a0a1a; color: #fff; font-size: 16px; }
+        .auth-box input:focus, .auth-box select:focus { outline: none; border-color: #00f5d4; }
+        .auth-box button { width: 100%; padding: 14px; border: none; border-radius: 10px; background: #00f5d4; color: #0a0a1a; font-size: 16px; font-weight: bold; cursor: pointer; }
+        .auth-box button:hover { background: #00d4b8; }
+        .auth-toggle { text-align: center; margin-top: 15px; color: #888; }
+        .auth-toggle a { color: #00f5d4; cursor: pointer; }
+        
+        /* App UI */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .logo { font-size: 24px; font-weight: bold; color: #00f5d4; text-decoration: none; }
+        
+        .user-profile-btn {
+            display: flex; align-items: center; gap: 10px; background: #1a1a3a; padding: 6px 12px;
+            border-radius: 20px; cursor: pointer; transition: 0.2s; border: 1px solid #333;
+        }
+        .user-profile-btn:hover { background: #2a2a4a; border-color: #00f5d4; }
+        .user-avatar {
+            width: 30px; height: 30px; border-radius: 50%; background: #00f5d4; color: #0a0a1a;
+            display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 14px;
+        }
+        
+        #map { width: 100%; height: 350px; border-radius: 16px; margin-bottom: 20px; }
+        
+        .input-group { margin-bottom: 15px; }
+        .input-group label { display: block; color: #888; font-size: 14px; margin-bottom: 5px; }
+        .input-group input, .input-group textarea { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #333; background: #1a1a3a; color: #fff; font-size: 16px; }
+        
+        /* Modals */
+        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; z-index: 90; }
+        .modal {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 90%; max-width: 400px; max-height: 85vh; overflow-y: auto;
+            background: #1a1a3a; padding: 30px; border-radius: 20px; z-index: 100; display: none; border: 1px solid #333;
+        }
+        .modal h3 { color: #00f5d4; margin-bottom: 15px; }
+        
+        .btn { padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; width: 100%; text-align: center; }
+        .btn-primary { background: #00f5d4; color: #0a0a1a; }
+        .btn-secondary { background: #333; color: #fff; }
+        .btn-danger { background: #ff4444; color: #fff; }
+        
+        /* Mapbox Geocoder Overrides */
+        .search-container .mapboxgl-ctrl-geocoder { width: 100%!important; max-width: 100%!important; background: #1a1a3a!important; border-radius: 10px!important; border: 1px solid #333!important; box-shadow: none!important; }
+        .search-container .mapboxgl-ctrl-geocoder input { color: #fff!important; }
+        .search-container .mapboxgl-ctrl-geocoder .suggestions { background: #1a1a3a!important; border: 1px solid #333!important; }
+        .search-container .mapboxgl-ctrl-geocoder .suggestions li a { color: #fff!important; }
+        .search-container .mapboxgl-ctrl-geocoder .suggestions li a:hover { background: #2a2a4a!important; }
+        
+        .ride-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0; }
+        .ride-card { padding: 16px; text-align: center; border-radius: 12px; border: 2px solid #333; cursor: pointer; background: #1a1a3a; transition: all 0.3s; }
+        .ride-card.active { border-color: #00f5d4; background: #1a2a2a; }
+        .ride-card .price { color: #888; font-size: 14px; margin-top: 4px; }
+        .ride-card.active .price { color: #00f5d4; }
+        
+        .btn-book { width: 100%; padding: 16px; border: none; border-radius: 12px; background: #00f5d4; color: #0a0a1a; font-size: 18px; font-weight: bold; cursor: pointer; }
+        .btn-book:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        /* Booking Status Panel */
+        #booking-status { display: none; margin-top: 20px; padding: 20px; border-radius: 16px; background: #1a1a3a; border: 1px solid #333; }
+        .loader { border: 4px solid #333; border-top: 4px solid #00f5d4; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 10px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .stepper { display: flex; justify-content: space-between; margin-top: 20px; margin-bottom: 20px; position: relative; }
+        .stepper::before { content: ''; position: absolute; top: 12px; left: 10px; right: 10px; height: 2px; background: #333; z-index: 1; }
+        .step { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; width: 60px; }
+        .step-dot { width: 26px; height: 26px; border-radius: 50%; background: #333; color: #888; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; border: 2px solid #1a1a3a; transition: all 0.3s; }
+        .step.active .step-dot { background: #00f5d4; color: #0a0a1a; transform: scale(1.1); box-shadow: 0 0 10px #00f5d4; }
+        .step.completed .step-dot { background: #00f5d4; color: #0a0a1a; }
+        .step-label { font-size: 10px; color: #888; margin-top: 5px; text-transform: uppercase; text-align: center; }
+        .step.active .step-label { color: #00f5d4; font-weight: bold; }
+        
+        .driver-card { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 12px; margin-top: 15px; border: 1px solid rgba(0,245,212,0.3); }
+        .driver-card .avatar-large { width: 50px; height: 50px; border-radius: 50%; background: #444; border: 2px solid #00f5d4; flex-shrink: 0; display: flex; justify-content: center; align-items: center; font-size: 1.5rem; font-weight: bold; }
+
+        #driver-map { height: 220px; border-radius: 12px; overflow: hidden; margin: 15px 0; display: none; border: 1px solid rgba(0,245,212,0.4); box-shadow: 0 0 20px rgba(0,245,212,0.1); }
+        
+        .history-item { padding: 15px; border-bottom: 1px solid #333; cursor: pointer; }
+        .history-item:hover { background: rgba(255,255,255,0.05); }
+        .status-badge { padding: 4px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; }
+        
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<!-- AUTH MODAL -->
+<div class="auth-overlay" id="authOverlay">
+    <div class="auth-box">
+        <h2 id="authTitle">🚕 Velox</h2>
+        <div id="loginSection">
+            <input type="email" id="loginEmail" placeholder="E-mailadres">
+            <input type="password" id="loginPassword" placeholder="Wachtwoord">
+            <button onclick="loginUser()">Inloggen</button>
+            <div class="auth-toggle">Nieuw hier? <a onclick="showRegister()">Account Aanmaken</a></div>
+        </div>
+        <div id="registerSection" class="hidden">
+            <input type="text" id="regName" placeholder="Volledige Naam">
+            <input type="email" id="regEmail" placeholder="E-mailadres">
+            <input type="password" id="regPassword" placeholder="Wachtwoord">
+            <select id="regRole"><option value="passenger">Passagier</option></select>
+            <button onclick="registerUser()">Registreren</button>
+            <div class="auth-toggle">Al een account? <a onclick="showLogin()">Inloggen</a></div>
+        </div>
+        <div id="authMessage" style="margin-top: 10px; text-align: center;"></div>
+    </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" class="hidden">
+    <div class="container animate-fade">
+        <header class="header">
+            <span class="logo">VELOX</span>
+            <div class="user-profile-btn" onclick="openProfileModal()">
+                <div class="user-avatar" id="avatarIcon">P</div>
+                <span id="userName" style="font-size: 0.9rem; font-weight: 600;">Passagier</span>
+            </div>
+        </header>
+
+        <div id="booking-flow">
+            <div class="input-group">
+                <label>📍 Ophaallocatie</label>
+                <div id="pickup-search" class="search-container"></div>
+                <input type="hidden" id="pickupAddress">
+            </div>
+
+            <div class="input-group">
+                <label>🏁 Bestemming</label>
+                <div id="destination-search" class="search-container"></div>
+                <input type="hidden" id="destinationAddress">
+            </div>
+
+            <div id="map"></div>
+
+            <div class="ride-options">
+                <div class="ride-card active" onclick="selectRide('economy', this)">
+                    <div>🚗 Economy</div>
+                    <div class="price" id="priceEconomy">--</div>
+                </div>
+                <div class="ride-card" onclick="selectRide('premium', this)">
+                    <div>🚙 Premium</div>
+                    <div class="price" id="pricePremium">--</div>
+                </div>
+            </div>
+
+            <button class="btn-book" id="bookBtn" onclick="bookRide()" disabled>Rit Boeken</button>
+        </div>
+
+        <!-- Booking Status Panel -->
+        <div id="booking-status">
+            <h3 id="statusTitle" style="color: #00f5d4; margin-bottom: 5px;">Rit Status</h3>
+            
+            <!-- DEBUG BAR: shows poll results in real time -->
+            <div id="debug-bar" style="font-size:0.7rem; color:#888; background:#111; padding:6px 10px; border-radius:6px; margin-bottom:10px; font-family:monospace; word-break:break-all;">Wachten op poll...</div>
+            
+            <div class="stepper">
+                <div class="step active" id="step-req">
+                    <div class="step-dot">1</div><div class="step-label">Zoeken</div>
+                </div>
+                <div class="step" id="step-acc">
+                    <div class="step-dot">2</div><div class="step-label">Onderweg</div>
+                </div>
+                <div class="step" id="step-enr">
+                    <div class="step-dot">3</div><div class="step-label">Gearriveerd</div>
+                </div>
+                <div class="step" id="step-com">
+                    <div class="step-dot">4</div><div class="step-label">Voltooid</div>
+                </div>
+            </div>
+
+            <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                <div id="search-loader" class="loader"></div>
+                <strong id="statusMsg" style="font-size: 1.1rem;">Zoeken naar chauffeur...</strong>
+            </div>
+            
+            <div id="driverInfo" class="hidden driver-card">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+                    <div style="display: flex; gap: 15px; align-items: center;">
+                        <div class="avatar-large" id="driverPhoto">D</div>
+                        <div>
+                            <div style="font-weight: bold; font-size: 1.2rem;" id="driverName">--</div>
+                            <div style="font-size: 0.9rem; color: #ffbc00;" id="driverRating">★ 5.0 Beoordeling</div>
+                        </div>
+                    </div>
+                    <div style="text-align: right; background: rgba(0,0,0,0.4); padding: 5px 10px; border-radius: 8px;">
+                        <div style="font-size: 0.8rem; color: #888;">ETA</div>
+                        <div style="font-weight: bold; color: #00f5d4; font-size: 1.4rem;" id="etaDisplay">-- min</div>
+                    </div>
+                </div>
+                
+                <div style="background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; font-size: 0.95rem; margin-bottom: 15px;">
+                    🚗 <strong id="driverVehicle" style="color: #fff;">--</strong> <br>
+                    <span style="color: #aaa; font-size: 0.85rem;">Kenteken: </span>
+                    <span style="font-family: monospace; font-size: 1.1rem; color: #00f5d4; font-weight: bold; background: #000; padding: 2px 6px; border: 1px solid #333; border-radius: 4px;" id="driverPlate">--</span>
+                </div>
+                
+                <button class="btn btn-secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 10px;" id="callDriverBtn">
+                    📞 Bel Chauffeur
+                </button>
+            </div>
+
+            <!-- Live driver location map -->
+            <div id="driver-map"></div>
+
+            <button class="btn btn-danger" style="margin-top: 20px;" onclick="cancelRide()" id="cancelBtn">Rit Annuleren</button>
+            <div id="completedActions" class="hidden" style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+                <button class="btn btn-primary" onclick="resetBooking()" id="newRideBtn">Nieuwe Rit Boeken</button>
+                <button class="btn btn-secondary" onclick="openComplaintModal()" style="border: 1px solid #ff4444; color: #ff4444; background: transparent;">Klaag over deze rit</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- PROFILE MODAL -->
+<div class="overlay" id="overlay" onclick="closeModals()"></div>
+<div class="modal" id="profileModal">
+    <h3>👤 Mijn Profiel</h3>
+    <div style="margin-bottom: 15px; color: #888; font-size: 0.9rem;">Werk uw gegevens hieronder bij:</div>
+    
+    <label style="font-size: 0.8rem; color: #888;">Volledige Naam</label>
+    <input type="text" id="prof-name" class="input-group input" style="width:100%; padding:12px; margin-bottom:10px; background:#222; border:1px solid #444; border-radius:8px; color:white;">
+    
+    <label style="font-size: 0.8rem; color: #888;">Telefoonnummer</label>
+    <input type="text" id="prof-phone" class="input-group input" style="width:100%; padding:12px; margin-bottom:20px; background:#222; border:1px solid #444; border-radius:8px; color:white;">
+    
+    <button class="btn btn-primary" style="margin-bottom: 10px;" onclick="saveProfile()">Opslaan</button>
+    <button class="btn btn-secondary" style="margin-bottom: 20px;" onclick="openHistoryModal()">Ritgeschiedenis</button>
+    <button class="btn btn-danger" onclick="logoutUser()">Uitloggen</button>
+</div>
+
+<!-- HISTORY MODAL -->
+<div class="modal" id="historyModal">
+    <h3>🚗 Ritgeschiedenis</h3>
+    <div id="history-list" style="margin-top: 15px; max-height: 50vh; overflow-y: auto;">
+        <!-- Dynamically loaded -->
+    </div>
+    <button class="btn btn-secondary" style="margin-top: 20px;" onclick="closeModals()">Sluiten</button>
+</div>
+
+<!-- COMPLAINT MODAL -->
+<div class="modal" id="complaintModal">
+    <h3 style="color: #ff4444;">Klaag over rit</h3>
+    <p style="font-size: 0.9rem; color: #aaa; margin-bottom: 15px;">Vul onderstaand formulier in. Ons team neemt zo snel mogelijk contact op.</p>
+    <textarea id="complaintText" rows="4" placeholder="Beschrijf uw probleem..." class="input-group input" style="background:#222; border:1px solid #444; color:white; width:100%; padding:12px; border-radius:8px; margin-bottom:15px;"></textarea>
+    <button class="btn btn-danger" style="margin-bottom: 10px;" onclick="submitComplaint()">Verstuur Klacht</button>
+    <button class="btn btn-secondary" onclick="closeModals()">Annuleren</button>
+</div>
+
+<script>
+// ================================================================
+// CONFIG & GLOBALS
+// ================================================================
+let mapboxToken = null;
+let map, pickupMarker, dropoffMarker, driverMarker;
+let pickupCoords = null;
+let dropoffCoords = null;
+let rideType = 'economy';
+let routeData = null;
+let activeRideId = null;
+let activeDriverId = null;
+let currentRideChannel = null;
+let driverLocationChannel = null;
+
+// Driver live map state
+let statusMap = null;
+let driverMapMarker = null;
+let driverLocPollInterval = null;
+
+const rates = { economy: 1.5, premium: 2.8 };
+
+// ================================================================
+// AUTH FUNCTIONS
+// ================================================================
+
+function showLogin() {
+    document.getElementById('loginSection').classList.remove('hidden');
+    document.getElementById('registerSection').classList.add('hidden');
+    document.getElementById('authTitle').textContent = '🚕 Velox';
+}
+
+function showRegister() {
+    document.getElementById('loginSection').classList.add('hidden');
+    document.getElementById('registerSection').classList.remove('hidden');
+    document.getElementById('authTitle').textContent = 'Account Aanmaken';
+}
+
+function setMessage(text, isError = false) {
+    const el = document.getElementById('authMessage');
+    el.textContent = text;
+    el.style.color = isError ? '#ff4444' : '#00f5d4';
+}
+
+async function loginUser() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    if (!email || !password) return setMessage('Vul alle velden in', true);
+    
+    setMessage('Bezig met inloggen...');
+    try {
+        const response = await fetch('/api/auth/login', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await response.json();
+        if (data.success) {
+            const user = { id: data.user.id, email: data.user.email, full_name: data.user.full_name || data.user.name || 'User', role: data.user.role || 'passenger', session: data.session };
+            localStorage.setItem('velox_user', JSON.stringify(user));
+            checkAuth();
+        } else {
+            setMessage('❌ ' + (data.error || 'Inloggen mislukt'), true);
+        }
+    } catch (e) { setMessage('❌ ' + e.message, true); }
+}
+
+async function registerUser() {
+    const full_name = document.getElementById('regName').value.trim();
+    const email = document.getElementById('regEmail').value.trim();
+    const password = document.getElementById('regPassword').value;
+    const user_type = document.getElementById('regRole').value;
+    if (!full_name || !email || !password) return setMessage('Vul alle velden in', true);
+    
+    setMessage('Registreren...');
+    try {
+        const response = await fetch('/api/auth/register', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password, full_name, user_type })
+        });
+        const data = await response.json();
+        if (data.success) {
+            setMessage('✅ Succesvol geregistreerd! Log nu in.');
+            showLogin(); document.getElementById('loginEmail').value = email; document.getElementById('loginPassword').value = '';
+        } else { setMessage('❌ ' + (data.error || 'Registratie mislukt'), true); }
+    } catch (e) { setMessage('❌ ' + e.message, true); }
+}
+
+function logoutUser() {
+    localStorage.removeItem('velox_user');
+    location.reload();
+}
+
+function checkAuth() {
+    const userData = localStorage.getItem('velox_user');
+    if (userData) {
+        try {
+            const user = JSON.parse(userData);
+            // ✅ FIXED: Block only if role is explicitly NOT 'passenger'
+            // 'passenger' is the only allowed role here
+            if (user.role && user.role !== 'passenger') {
+                alert(`Toegang geweigerd. U bent een ${user.role}. Dit is de passagier app.`);
+                logoutUser(); return null;
+            }
+            document.getElementById('authOverlay').style.display = 'none';
+            document.getElementById('app').classList.remove('hidden');
+            document.getElementById('userName').textContent = user.full_name || user.name || user.email;
+            document.getElementById('avatarIcon').textContent = (user.full_name || user.name || user.email || 'P').charAt(0).toUpperCase();
+            loadConfig();
+            return user;
+        } catch (e) { localStorage.removeItem('velox_user'); }
+    }
+    return null;
+}
+
+// ================================================================
+// APP LOGIC
+// ================================================================
+
+async function loadConfig() {
+    try {
+        const res = await fetch('/api/config');
+        const config = await res.json();
+        mapboxToken = config.mapboxToken;
+        if (config.supabaseUrl && config.supabaseAnonKey && typeof supabase !== 'undefined') {
+            window.supabaseClient = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+
+            // ✅ CRITICAL: authenticate the Realtime WebSocket connection
+            // Without setSession(), the WS connection is anonymous and RLS blocks all events
+            const user = JSON.parse(localStorage.getItem('velox_user'));
+            const session = user?.session;
+            if (session?.access_token && session?.refresh_token) {
+                await window.supabaseClient.auth.setSession({
+                    access_token: session.access_token,
+                    refresh_token: session.refresh_token
+                });
+            }
+        }
+        initMap();
+    } catch (err) { console.error('Config error:', err); }
+}
+
+function initMap() {
+    mapboxgl.accessToken = mapboxToken;
+    const defaultCoords = [4.8952, 52.3702];
+    map = new mapboxgl.Map({ container: 'map', style: 'mapbox://styles/mapbox/dark-v11', center: defaultCoords, zoom: 13 });
+    
+    const pickupGeocoder = new MapboxGeocoder({ accessToken: mapboxToken, mapboxgl: mapboxgl, placeholder: 'Zoek ophaallocatie...', marker: false });
+    document.getElementById('pickup-search').appendChild(pickupGeocoder.onAdd(map));
+    pickupGeocoder.on('result', (e) => {
+        pickupCoords = e.result.center;
+        document.getElementById('pickupAddress').value = e.result.place_name;
+        if (pickupMarker) pickupMarker.remove();
+        pickupMarker = new mapboxgl.Marker({ color: '#00f5d4' }).setLngLat(pickupCoords).addTo(map);
+        map.setCenter(pickupCoords); map.setZoom(14);
+        if (dropoffCoords) calculateRoute();
+    });
+    
+    const destGeocoder = new MapboxGeocoder({ accessToken: mapboxToken, mapboxgl: mapboxgl, placeholder: 'Zoek bestemming...', marker: false });
+    document.getElementById('destination-search').appendChild(destGeocoder.onAdd(map));
+    destGeocoder.on('result', (e) => {
+        dropoffCoords = e.result.center;
+        document.getElementById('destinationAddress').value = e.result.place_name;
+        if (dropoffMarker) dropoffMarker.remove();
+        dropoffMarker = new mapboxgl.Marker({ color: '#9d4edd' }).setLngLat(dropoffCoords).addTo(map);
+        calculateRoute();
+    });
+
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(pos => {
+            pickupCoords = [pos.coords.longitude, pos.coords.latitude];
+            document.getElementById('pickupAddress').value = "Mijn Locatie";
+            if (pickupMarker) pickupMarker.remove();
+            pickupMarker = new mapboxgl.Marker({ color: '#00f5d4' }).setLngLat(pickupCoords).addTo(map);
+            map.setCenter(pickupCoords);
+        }, () => {});
+    }
+}
+
+async function calculateRoute() {
+    if (!pickupCoords || !dropoffCoords) return;
+    try {
+        const res = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${pickupCoords.join(',')};${dropoffCoords.join(',')}?geometries=geojson&access_token=${mapboxgl.accessToken}`);
+        const data = await res.json();
+        if (data.routes && data.routes.length > 0) {
+            routeData = data.routes[0];
+            drawRoute(routeData.geometry);
+            
+            const distanceKm = routeData.distance / 1000;
+            const durationMins = routeData.duration / 60;
+            const baseFare = 3.00;
+            document.getElementById('priceEconomy').textContent = `€${(baseFare + (distanceKm * rates.economy) + (durationMins * 0.25)).toFixed(2)}`;
+            document.getElementById('pricePremium').textContent = `€${(baseFare + (distanceKm * rates.premium) + (durationMins * 0.50)).toFixed(2)}`;
+            document.getElementById('bookBtn').disabled = false;
+        }
+    } catch (e) { console.error(e); }
+}
+
+function drawRoute(geometry) {
+    if (map.getSource('route')) map.getSource('route').setData(geometry);
+    else {
+        map.addSource('route', { 'type': 'geojson', 'data': geometry });
+        map.addLayer({ 'id': 'route', 'type': 'line', 'source': 'route', 'paint': { 'line-color': '#00f5d4', 'line-width': 4 } });
+    }
+    const bounds = new mapboxgl.LngLatBounds().extend(pickupCoords).extend(dropoffCoords);
+    map.fitBounds(bounds, { padding: 40 });
+}
+
+function selectRide(type, element) {
+    rideType = type;
+    document.querySelectorAll('.ride-card').forEach(c => c.classList.remove('active'));
+    element.classList.add('active');
+}
+
+async function bookRide() {
+    if (!routeData) return;
+    const priceText = document.getElementById(`price${rideType.charAt(0).toUpperCase() + rideType.slice(1)}`).textContent;
+    const price = parseFloat(priceText.replace('€', ''));
+    const user = JSON.parse(localStorage.getItem('velox_user'));
+    
+    document.getElementById('booking-flow').style.display = 'none';
+    document.getElementById('booking-status').style.display = 'block';
+    updateStepper('req');
+    
+    try {
+        const response = await fetch('/api/rides/create', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.session?.access_token || ''}` },
+            body: JSON.stringify({
+                pickup_lat: pickupCoords[1], pickup_lng: pickupCoords[0], pickup_address: document.getElementById('pickupAddress').value || 'Location',
+                dropoff_lat: dropoffCoords[1], dropoff_lng: dropoffCoords[0], dropoff_address: document.getElementById('destinationAddress').value || 'Destination',
+                price: price, distance: routeData.distance / 1000, duration: routeData.duration / 60, user_id: user.id
+            })
+        });
+        const data = await response.json();
+        if (data.success || data.ride) {
+            const rideData = data.ride || data.data;
+            activeRideId = rideData.id;
+            subscribeToRide(activeRideId);
+        } else throw new Error(data.error);
+    } catch (err) {
+        alert('Boeken mislukt: ' + err.message);
+        resetBooking();
+    }
+}
+
+// ================================================================
+// REALTIME & STATUS
+// ================================================================
+
+function updateStepper(step) {
+    const steps = ['req', 'acc', 'enr', 'com'];
+    let reached = true;
+    steps.forEach(s => {
+        const el = document.getElementById(`step-${s}`);
+        if (s === step) { el.classList.add('active'); el.classList.remove('completed'); reached = false; }
+        else if (reached) { el.classList.add('completed'); el.classList.remove('active'); }
+        else { el.classList.remove('completed', 'active'); }
+    });
+}
+
+let rideStatusPollInterval = null;
+let lastKnownStatus = null;
+
+function subscribeToRide(rideId) {
+    // Clear any existing poll
+    if (rideStatusPollInterval) clearInterval(rideStatusPollInterval);
+    lastKnownStatus = 'requested';
+
+    // Poll every 3 seconds — reliable alternative to Realtime WebSocket
+    rideStatusPollInterval = setInterval(async () => {
+        try {
+            const user = JSON.parse(localStorage.getItem('velox_user'));
+            const token = user?.session?.access_token || '';
+
+            const res = await fetch(`/api/ride-poll?id=${rideId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            const debugEl = document.getElementById('debug-bar');
+
+            if (!res.ok) {
+                const errText = await res.text();
+                if (debugEl) debugEl.textContent = `❌ Poll HTTP ${res.status}: ${errText.slice(0,80)}`;
+                console.error('Poll failed:', res.status, errText);
+                return;
+            }
+
+            const ride = await res.json();
+            if (debugEl) debugEl.textContent = `✅ Poll OK | id: ${ride?.id?.slice(0,8)}... | status: ${ride?.status} | driver: ${ride?.driver_id?.slice(0,8) || 'none'}`;
+
+            // Only process if status actually changed
+            if (!ride || ride.status === lastKnownStatus) return;
+            lastKnownStatus = ride.status;
+
+            await handleRideStatusChange(ride);
+
+        } catch (e) {
+            console.error('Poll error:', e);
+            const debugEl = document.getElementById('debug-bar');
+            if (debugEl) debugEl.textContent = `💥 Poll crash: ${e.message}`;
+        }
+    }, 3000);
+}
+
+async function handleRideStatusChange(ride) {
+    const statusMsg = document.getElementById('statusMsg');
+    const debugEl = document.getElementById('debug-bar');
+
+    if (ride.status === 'accepted') {
+        if (debugEl) debugEl.textContent = `🚕 Status: ACCEPTED — chauffeur gevonden, info ophalen...`;
+        activeDriverId = ride.driver_id;
+        updateStepper('acc');
+        document.getElementById('search-loader').classList.add('hidden');
+        statusMsg.textContent = '🚕 Chauffeur is onderweg naar u!';
+
+        // Show driver info card — fetch driver details
+        const user = JSON.parse(localStorage.getItem('velox_user'));
+        const token = user?.session?.access_token || '';
+        try {
+            const res = await fetch(`/api/drivers/${ride.driver_id}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                document.getElementById('driverInfo').classList.remove('hidden');
+
+                const driverName = data.name || 'Chauffeur';
+                document.getElementById('driverName').textContent = driverName;
+                document.getElementById('driverPhoto').textContent = driverName.charAt(0).toUpperCase();
+                document.getElementById('driverRating').textContent = `★ ${data.stats?.avgRating || '5.0'} Beoordeling`;
+                document.getElementById('driverVehicle').textContent = data.vehicle_model || 'Standaard Voertuig';
+                document.getElementById('driverPlate').textContent = data.vehicle_plate || '--';
+
+                // Wire up call button
+                const callBtn = document.getElementById('callDriverBtn');
+                if (data.phone) {
+                    callBtn.onclick = () => window.location.href = `tel:${data.phone}`;
+                    callBtn.style.display = 'flex';
+                } else {
+                    callBtn.style.display = 'none';
+                }
+                if (debugEl) debugEl.textContent = `✅ Chauffeur: ${driverName} | ${data.vehicle_model || ''} | ${data.vehicle_plate || ''}`;
+            } else {
+                // Show card with placeholder if fetch fails
+                document.getElementById('driverInfo').classList.remove('hidden');
+            }
+        } catch (e) {
+            console.error('Driver detail error:', e);
+            document.getElementById('driverInfo').classList.remove('hidden');
+        }
+
+        // Start live map — wrapped so a Mapbox token error can't crash the whole handler
+        try {
+            initDriverMap();
+        } catch (e) {
+            console.error('Map init error (non-fatal):', e);
+        }
+        try {
+            await startDriverLocationPolling(ride.driver_id);
+        } catch (e) {
+            console.error('Location poll start error (non-fatal):', e);
+        }
+    }
+    else if (ride.status === 'enroute') {
+        if (debugEl) debugEl.textContent = `🏃 Status: ONDERWEG — chauffeur is gearriveerd`;
+        updateStepper('enr');
+        statusMsg.textContent = '📍 Chauffeur is gearriveerd! Uw rit begint.';
+        document.getElementById('etaDisplay').textContent = 'Nu';
+    }
+    else if (ride.status === 'completed') {
+        if (debugEl) debugEl.textContent = `✅ Status: VOLTOOID`;
+        clearInterval(rideStatusPollInterval); rideStatusPollInterval = null;
+        clearInterval(driverLocPollInterval);  driverLocPollInterval = null;
+        updateStepper('com');
+        statusMsg.textContent = 'Rit succesvol voltooid. Bedankt voor het reizen met Velox!';
+        document.getElementById('driverInfo').classList.add('hidden');
+        document.getElementById('driver-map').style.display = 'none';
+        document.getElementById('cancelBtn').classList.add('hidden');
+        document.getElementById('completedActions').classList.remove('hidden');
+    }
+    else if (ride.status === 'cancelled') {
+        if (debugEl) debugEl.textContent = `❌ Status: GEANNULEERD`;
+        clearInterval(rideStatusPollInterval); rideStatusPollInterval = null;
+        clearInterval(driverLocPollInterval);  driverLocPollInterval = null;
+        statusMsg.textContent = 'Rit is geannuleerd.';
+        document.getElementById('search-loader').classList.add('hidden');
+        document.getElementById('driver-map').style.display = 'none';
+        document.getElementById('completedActions').classList.remove('hidden');
+        document.getElementById('cancelBtn').classList.add('hidden');
+    }
+}
+
+// ================================================================
+// DRIVER LIVE MAP
+// ================================================================
+
+function initDriverMap() {
+    const mapEl = document.getElementById('driver-map');
+    mapEl.style.display = 'block';
+    if (statusMap) return; // already initialized
+
+    // Ensure token is set — loadConfig sets mapboxToken but may not have set accessToken yet
+    if (mapboxToken && !mapboxgl.accessToken) mapboxgl.accessToken = mapboxToken;
+    if (!mapboxgl.accessToken) {
+        console.warn('Mapbox token not ready — map skipped');
+        return;
+    }
+
+    statusMap = new mapboxgl.Map({
+        container: 'driver-map',
+        style: 'mapbox://styles/mapbox/dark-v11',
+        zoom: 13,
+        center: pickupCoords || [4.8952, 52.3702],
+        attributionControl: false
+    });
+
+    statusMap.on('load', () => {
+        // Pickup pin
+        if (pickupCoords) {
+            const el = document.createElement('div');
+            el.textContent = '📍';
+            el.style.cssText = 'font-size:28px;line-height:1;cursor:default;';
+            new mapboxgl.Marker({ element: el }).setLngLat(pickupCoords).addTo(statusMap);
+        }
+
+        // Route line from driver → pickup
+        statusMap.addSource('drv-route', {
+            type: 'geojson',
+            data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
+        });
+        statusMap.addLayer({
+            id: 'drv-route-line',
+            type: 'line',
+            source: 'drv-route',
+            paint: { 'line-color': '#00f5d4', 'line-width': 4, 'line-opacity': 0.85,
+                     'line-dasharray': [2, 1] }
+        });
+    });
+}
+
+async function startDriverLocationPolling(driverId) {
+    if (driverLocPollInterval) clearInterval(driverLocPollInterval);
+    // Poll immediately, then every 5 seconds
+    await pollDriverLocation(driverId);
+    driverLocPollInterval = setInterval(() => pollDriverLocation(driverId), 5000);
+}
+
+async function pollDriverLocation(driverId) {
+    try {
+        const res = await fetch(`/api/driver-location?id=${driverId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.current_lat && data.current_lng) {
+            updateDriverOnMap(parseFloat(data.current_lng), parseFloat(data.current_lat));
+        }
+    } catch (e) { console.error('Driver loc poll:', e); }
+}
+
+async function updateDriverOnMap(lng, lat) {
+    if (!statusMap) return;
+    const driverCoords = [lng, lat];
+
+    // Create or move driver marker
+    if (driverMapMarker) {
+        driverMapMarker.setLngLat(driverCoords);
+    } else {
+        const el = document.createElement('div');
+        el.style.cssText = 'width:38px;height:38px;background:#ffbc00;border-radius:50%;border:3px solid #fff;box-shadow:0 0 16px rgba(255,188,0,0.7);display:flex;align-items:center;justify-content:center;font-size:20px;';
+        el.textContent = '🚕';
+        driverMapMarker = new mapboxgl.Marker({ element: el })
+            .setLngLat(driverCoords)
+            .addTo(statusMap);
+    }
+
+    // Draw route driver → pickup via Mapbox Directions API
+    if (pickupCoords && mapboxToken) {
+        try {
+            const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${driverCoords.join(',')};${pickupCoords.join(',')}?access_token=${mapboxToken}&geometries=geojson&overview=full`;
+            const r = await fetch(url);
+            const rd = await r.json();
+            if (rd.routes && rd.routes[0] && statusMap.getSource('drv-route')) {
+                statusMap.getSource('drv-route').setData({
+                    type: 'Feature',
+                    geometry: rd.routes[0].geometry
+                });
+                // Fit map to show driver + pickup
+                const coords = rd.routes[0].geometry.coordinates;
+                const bounds = coords.reduce(
+                    (b, c) => b.extend(c),
+                    new mapboxgl.LngLatBounds(coords[0], coords[0])
+                );
+                statusMap.fitBounds(bounds, { padding: 50, maxZoom: 15 });
+
+                // Live ETA
+                const mins = Math.max(1, Math.ceil(rd.routes[0].duration / 60));
+                document.getElementById('etaDisplay').textContent = mins + ' min';
+            }
+        } catch (e) { console.error('Route draw error:', e); }
+    }
+}
+
+
+function subscribeToDriverLocation(driverId) {
+    if (!window.supabaseClient) return;
+    if (driverLocationChannel) window.supabaseClient.removeChannel(driverLocationChannel);
+
+    driverLocationChannel = window.supabaseClient.channel(`driver_loc_${driverId}`)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'drivers', filter: `id=eq.${driverId}` }, (payload) => {
+            const driver = payload.new;
+            if (driver.current_lat && driver.current_lng) {
+                const driverCoords = [driver.current_lng, driver.current_lat];
+                
+                // Update or create Car Icon on Map
+                if (driverMarker) {
+                    driverMarker.setLngLat(driverCoords);
+                } else {
+                    const el = document.createElement('div');
+                    el.style.width = '30px'; el.style.height = '30px';
+                    el.style.backgroundColor = '#ffbc00';
+                    el.style.borderRadius = '50%';
+                    el.style.border = '2px solid white';
+                    el.style.boxShadow = '0 0 10px rgba(255,188,0,0.5)';
+                    driverMarker = new mapboxgl.Marker({ element: el }).setLngLat(driverCoords).addTo(map);
+                }
+                
+                updateETA(driverCoords, pickupCoords);
+            }
+        }).subscribe();
+}
+
+async function updateETA(driverLocation, passengerLocation) {
+    if (!driverLocation || !passengerLocation) return;
+    try {
+        const res = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${driverLocation.join(',')};${passengerLocation.join(',')}?access_token=${mapboxgl.accessToken}`);
+        const data = await res.json();
+        if (data.routes && data.routes.length > 0) {
+            const durationMins = Math.ceil(data.routes[0].duration / 60);
+            document.getElementById('etaDisplay').textContent = durationMins + ' min';
+        }
+    } catch(e) { console.error('ETA Update error', e); }
+}
+
+async function cancelRide() {
+    if (!activeRideId) return;
+    const user = JSON.parse(localStorage.getItem('velox_user'));
+    await fetch(`/api/rides/${activeRideId}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.session?.access_token || ''}` },
+        body: JSON.stringify({ ride_id: activeRideId, status: 'cancelled' })
+    });
+    resetBooking();
+}
+
+function resetBooking() {
+    // Stop all polling
+    if (rideStatusPollInterval) { clearInterval(rideStatusPollInterval); rideStatusPollInterval = null; }
+    if (driverLocPollInterval)  { clearInterval(driverLocPollInterval);  driverLocPollInterval = null; }
+    lastKnownStatus = null;
+
+    // Reset driver map
+    document.getElementById('driver-map').style.display = 'none';
+    if (statusMap) { statusMap.remove(); statusMap = null; }
+    driverMapMarker = null;
+
+    document.getElementById('booking-flow').style.display = 'block';
+    document.getElementById('booking-status').style.display = 'none';
+    document.getElementById('search-loader').classList.remove('hidden');
+    document.getElementById('driverInfo').classList.add('hidden');
+    document.getElementById('cancelBtn').classList.remove('hidden');
+    document.getElementById('completedActions').classList.add('hidden');
+    document.getElementById('statusMsg').textContent = 'Zoeken naar chauffeur...';
+
+    if (driverMarker) { driverMarker.remove(); driverMarker = null; }
+    activeRideId = null;
+    activeDriverId = null;
+    updateStepper('req');
+}
+
+// ================================================================
+// PROFILE, HISTORY & COMPLAINTS
+// ================================================================
+
+function closeModals() {
+    document.getElementById('overlay').style.display = 'none';
+    document.getElementById('profileModal').style.display = 'none';
+    document.getElementById('historyModal').style.display = 'none';
+    document.getElementById('complaintModal').style.display = 'none';
+}
+
+async function openProfileModal() {
+    const user = JSON.parse(localStorage.getItem('velox_user'));
+    try {
+        const res = await fetch('/api/users/profile', { headers: { 'Authorization': `Bearer ${user.session?.access_token || ''}` }});
+        const data = await res.json();
+        document.getElementById('prof-name').value = data.name || '';
+        document.getElementById('prof-phone').value = data.phone || '';
+        document.getElementById('overlay').style.display = 'block';
+        document.getElementById('profileModal').style.display = 'block';
+    } catch(e) { console.error(e); }
+}
+
+async function saveProfile() {
+    const user = JSON.parse(localStorage.getItem('velox_user'));
+    const name = document.getElementById('prof-name').value;
+    const phone = document.getElementById('prof-phone').value;
+    try {
+        await fetch('/api/users/profile', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${user.session?.access_token || ''}` },
+            body: JSON.stringify({ name, phone })
+        });
+        alert("Profiel bijgewerkt!");
+        document.getElementById('userName').textContent = name;
+        document.getElementById('avatarIcon').textContent = name.charAt(0).toUpperCase();
+        closeModals();
+    } catch(e) { console.error(e); }
+}
+
+async function openHistoryModal() {
+    document.getElementById('profileModal').style.display = 'none';
+    const user = JSON.parse(localStorage.getItem('velox_user'));
+    try {
+        const res = await fetch('/api/users/rides', { headers: { 'Authorization': `Bearer ${user.session?.access_token || ''}` }});
+        const rides = await res.json();
+        
+        const list = document.getElementById('history-list');
+        list.innerHTML = '';
+        if (rides.length === 0) list.innerHTML = '<div style="color:#888; text-align:center;">Geen ritten</div>';
+        
+        rides.forEach(r => {
+            const div = document.createElement('div');
+            div.className = 'history-item';
+            
+            const badgeColor = r.status === 'completed' ? 'rgba(0, 245, 212, 0.1)' : 'rgba(255, 68, 68, 0.1)';
+            const textColor = r.status === 'completed' ? '#00f5d4' : '#ff4444';
+            
+            div.innerHTML = `
+                <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                    <strong style="color:var(--secondary); font-size:1.1rem;">€${parseFloat(r.price).toFixed(2)}</strong>
+                    <span class="status-badge" style="background:${badgeColor}; color:${textColor};">${r.status}</span>
+                </div>
+                <div style="font-size:0.8rem; color:#888; margin-bottom:5px;">${new Date(r.created_at).toLocaleString()}</div>
+                <div style="font-size:0.85rem; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">P: ${r.pickup_address}</div>
+            `;
+            list.appendChild(div);
+        });
+        
+        document.getElementById('historyModal').style.display = 'block';
+    } catch(e) { console.error(e); }
+}
+
+function openComplaintModal() {
+    document.getElementById('complaintText').value = '';
+    document.getElementById('overlay').style.display = 'block';
+    document.getElementById('complaintModal').style.display = 'block';
+}
+
+async function submitComplaint() {
+    const text = document.getElementById('complaintText').value.trim();
+    if (!text) { alert('Vul alstublieft een klacht in.'); return; }
+    if (!activeRideId) { alert('Geen actieve rit geselecteerd.'); return; }
+    
+    const user = JSON.parse(localStorage.getItem('velox_user'));
+    
+    try {
+        const { error } = await window.supabaseClient.from('complaints').insert([{
+            passenger_id: user.id,
+            driver_id: activeDriverId,
+            ride_id: activeRideId,
+            complaint_text: text,
+            status: 'new'
+        }]);
+        
+        if (error) throw error;
+        
+        alert('Uw klacht is succesvol ingediend. Wij nemen zo snel mogelijk contact op.');
+        closeModals();
+    } catch (e) {
+        alert('Er ging iets mis bij het indienen van uw klacht: ' + e.message);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', checkAuth);
+</script>
+</body>
+</html>

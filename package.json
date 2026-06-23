@@ -1,0 +1,19 @@
+{
+  "name": "velox-taxi",
+  "version": "1.0.0",
+  "description": "Velox Taxi MVP - Production Ready",
+  "main": "api/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'No build step required for static frontend'",
+    "start": "vercel dev"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.8",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "vercel": "^32.3.0"
+  }
+}

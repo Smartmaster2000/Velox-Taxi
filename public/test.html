@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Velox - Registration Test</title>
+    <style>
+        body { font-family: Arial; background: #0a0a1a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .box { background: #1a1a3a; padding: 40px; border-radius: 16px; width: 400px; }
+        input, select { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #333; background: #0a0a1a; color: white; font-size: 16px; }
+        button { width: 100%; padding: 14px; background: #00f5d4; color: #0a0a1a; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; }
+        button:hover { background: #00d4b8; }
+        #result { margin-top: 20px; padding: 16px; background: #0a0a1a; border-radius: 8px; display: none; white-space: pre-wrap; font-size: 14px; }
+        .success { border-left: 4px solid #00f5d4; }
+        .error { border-left: 4px solid #ff4444; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h2>🚕 Velox Registration Test</h2>
+        <p style="color: #888; font-size: 14px;">Fill in ALL fields and click Register</p>
+        
+        <input type="text" id="testName" placeholder="Full Name" value="Test User">
+        <input type="email" id="testEmail" placeholder="Email" value="test@email.com">
+        <input type="password" id="testPassword" placeholder="Password" value="Test123!">
+        <select id="testRole">
+            <option value="passenger">Passenger</option>
+            <option value="driver">Driver</option>
+            <option value="admin">Admin</option>
+        </select>
+        
+        <button onclick="testRegister()">Register</button>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function testRegister() {
+            const full_name = document.getElementById('testName').value.trim();
+            const email = document.getElementById('testEmail').value.trim();
+            const password = document.getElementById('testPassword').value;
+            const user_type = document.getElementById('testRole').value;
+            
+            const resultDiv = document.getElementById('result');
+            resultDiv.style.display = 'block';
+            
+            // Build the data object
+            const data = { email, password, full_name, user_type };
+            
+            // Show what we're sending
+            resultDiv.innerHTML = `📤 SENDING:\n${JSON.stringify(data, null, 2)}`;
+            resultDiv.className = '';
+            
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const responseData = await response.json();
+                
+                // Show what we received
+                resultDiv.innerHTML += `\n\n📥 RECEIVED (Status: ${response.status}):\n${JSON.stringify(responseData, null, 2)}`;
+                
+                if (responseData.success) {
+                    resultDiv.className = 'success';
+                } else {
+                    resultDiv.className = 'error';
+                }
+            } catch (err) {
+                resultDiv.innerHTML += `\n\n❌ ERROR:\n${err.message}`;
+                resultDiv.className = 'error';
+            }
+        }
+    </script>
+</body>
+</html>

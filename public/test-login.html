@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Velox - Login Test</title>
+    <style>
+        body { font-family: Arial; background: #0a0a1a; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .box { background: #1a1a3a; padding: 40px; border-radius: 16px; width: 400px; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #333; background: #0a0a1a; color: white; font-size: 16px; }
+        button { width: 100%; padding: 14px; background: #00f5d4; color: #0a0a1a; border: none; border-radius: 8px; font-weight: bold; font-size: 16px; cursor: pointer; }
+        #result { margin-top: 20px; padding: 16px; background: #0a0a1a; border-radius: 8px; display: none; white-space: pre-wrap; font-size: 12px; max-height: 400px; overflow: auto; }
+        .success { border-left: 4px solid #00f5d4; }
+        .error { border-left: 4px solid #ff4444; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h2>🚕 Velox Login Test</h2>
+        
+        <input type="email" id="loginEmail" placeholder="Email" value="pachataxi020@gmail.com">
+        <input type="password" id="loginPassword" placeholder="Password" value="Test123!">
+        <button onclick="testLogin()">Login</button>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function testLogin() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            const resultDiv = document.getElementById('result');
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '⏳ Logging in...';
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                resultDiv.innerHTML = `📤 REQUEST: /api/auth/login\n\n📥 RESPONSE (Status: ${response.status}):\n${JSON.stringify(data, null, 2)}`;
+                
+                if (data.success) {
+                    resultDiv.className = 'success';
+                } else {
+                    resultDiv.className = 'error';
+                }
+            } catch (err) {
+                resultDiv.innerHTML = `❌ ERROR:\n${err.message}`;
+                resultDiv.className = 'error';
+            }
+        }
+    </script>
+</body>
+</html>
