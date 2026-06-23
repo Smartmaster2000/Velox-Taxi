@@ -164,7 +164,7 @@
         document.addEventListener('DOMContentLoaded', async () => {
             const user = getUserFromStorage();
             
-            // ✅ FIXED: Allow access ONLY if role is exactly 'admin' per user request
+            // ✅ FIXED: Allow access ONLY if role is exactly 'admin'
             if (user && user.role === 'admin') {
                 // Ensure UI reflects the Admin state immediately
                 document.getElementById('admin-badge').innerText = (user.name || 'Admin').toUpperCase() + ' • ADMIN';
@@ -172,11 +172,13 @@
                 await loadConfig();
                 initMap();
                 await loadMetricsAndRides();
-                await loadDrivers();
+                await loadDrivers();        // ← Loads drivers (ONLY ONCE)
+                await loadMetrics();        // ← ✅ ADD THIS
+                await loadActiveRides();    // ← ✅ ADD THIS
                 await loadComplaints();
                 subscribeToRealtimeEvents();
-
-                // ✅ Polling fallback — refreshes every 10s even if Realtime misses events
+                
+                // ✅ Polling fallback — refreshes every 10s
                 setInterval(async () => {
                     await loadMetricsAndRides();
                     await loadDrivers();
@@ -186,7 +188,6 @@
                 window.location.href = '/index.html';
             }
         });
-
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -372,7 +373,103 @@
                 document.getElementById('stat-drivers').innerText = onlineCount;
             } catch (err) { console.error(err); }
         }
+        async function loadMetrics() {
+            if (!window.supabaseClient) return;
+            try {
+                console.log('🔄 Loading metrics...');
+                
+                // ✅ Get active rides count
+                const { data: activeRides, error: aErr } = await window.supabaseClient
+                    .from('rides')
+                    .select('id')
+                    .in('status', ['requested', 'accepted', 'enroute']);
 
+                if (aErr) {
+                    console.error('❌ Error counting active rides:', aErr);
+                    return;
+                }
+
+                // ✅ Update the stats card
+                document.getElementById('active-rides-val').innerText = activeRides ? activeRides.length : 0;
+                
+                // ✅ Get today's revenue
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                const { data: completedRides, error: cErr } = await window.supabaseClient
+                    .from('rides')
+                    .select('price')
+                    .eq('status', 'completed')
+                    .gte('created_at', today.toISOString());
+
+                if (cErr) {
+                    console.error('❌ Error counting completed rides:', cErr);
+                    return;
+                }
+
+                const revenue = completedRides ? completedRides.reduce((sum, r) => sum + parseFloat(r.price || 0), 0) : 0;
+                document.getElementById('revenue-val').innerText = `€${revenue.toFixed(2)}`;
+                
+                // ✅ Update completed rides count
+                document.getElementById('completed-rides-val').innerText = completedRides ? completedRides.length : 0;
+                
+                console.log('✅ Metrics loaded:', {
+                    activeRides: activeRides?.length || 0,
+                    revenue: revenue,
+                    completed: completedRides?.length || 0
+                });
+            } catch (err) {
+                console.error('❌ Error in loadMetrics:', err);
+            }
+        }
+        async function loadActiveRides() {
+            if (!window.supabaseClient) return;
+            try {
+                console.log('🔄 Loading active rides...');
+                
+                const { data: rides, error } = await window.supabaseClient
+                    .from('rides')
+                    .select('*')
+                    .in('status', ['requested', 'accepted', 'enroute'])
+                    .order('created_at', { ascending: false });
+
+                if (error) {
+                    console.error('❌ Error loading rides:', error);
+                    return;
+                }
+
+                console.log('✅ Active rides loaded:', rides?.length || 0);
+
+                const list = document.getElementById('ride-list');
+                if (!list) return;
+                
+                list.innerHTML = '';
+
+                if (!rides || rides.length === 0) {
+                    list.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#888; padding:20px;">Geen actieve ritten</td></tr>';
+                    return;
+                }
+
+                rides.forEach(r => {
+                    const tr = document.createElement('tr');
+                    tr.onclick = () => showRideDetails(r);
+                    tr.innerHTML = `
+                        <td style="font-family: monospace;">${r.id.substring(0,8)}</td>
+                        <td>${r.passenger_id ? 'Passenger' : 'N/A'}</td>
+                        <td>${r.driver_id ? 'Driver' : 'Unassigned'}</td>
+                        <td>
+                            <div style="font-size:0.8rem; max-width:150px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">P: ${r.pickup_address || 'N/A'}</div>
+                            <div style="font-size:0.8rem; max-width:150px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">D: ${r.dropoff_address || 'N/A'}</div>
+                        </td>
+                        <td><span class="status-badge">${r.status}</span></td>
+                        <td style="font-weight:bold; color:var(--secondary);">€${(r.price || 0).toFixed(2)}</td>
+                    `;
+                    list.appendChild(tr);
+                });
+            } catch (err) {
+                console.error('❌ Error in loadActiveRides:', err);
+            }
+        }
         async function loadComplaints() {
             if (!window.supabaseClient) return;
             try {

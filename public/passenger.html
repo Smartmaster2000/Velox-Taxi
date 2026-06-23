@@ -227,11 +227,47 @@
             <button class="btn btn-danger" style="margin-top: 20px;" onclick="cancelRide()" id="cancelBtn">Rit Annuleren</button>
             <div id="completedActions" class="hidden" style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
                 <button class="btn btn-primary" onclick="resetBooking()" id="newRideBtn">Nieuwe Rit Boeken</button>
-                <button class="btn btn-secondary" onclick="openComplaintModal()" style="border: 1px solid #ff4444; color: #ff4444; background: transparent;">Klaag over deze rit</button>
-            </div>
-        </div>
-    </div>
-</div>
+                
+                <!-- ⭐ Star Rating System -->
+                <div id="ratingSection" style="background: #1a1a3a; padding: 20px; border-radius: 16px; border: 1px solid #333;">
+                    <div style="text-align: center; margin-bottom: 15px;">
+                        <span style="color: #888; font-size: 0.9rem;">⭐ Hoe was uw rit?</span>
+                    </div>
+                    <div style="display: flex; justify-content: center; gap: 12px; font-size: 2.5rem; cursor: pointer;">
+                        <span onclick="setRating(1)" id="star1" style="color: #555; transition: 0.2s;">★</span>
+                        <span onclick="setRating(2)" id="star2" style="color: #555; transition: 0.2s;">★</span>
+                        <span onclick="setRating(3)" id="star3" style="color: #555; transition: 0.2s;">★</span>
+                        <span onclick="setRating(4)" id="star4" style="color: #555; transition: 0.2s;">★</span>
+                        <span onclick="setRating(5)" id="star5" style="color: #555; transition: 0.2s;">★</span>
+                    </div>
+                    
+                    <!-- Complaint Form (hidden by default) -->
+                    <div id="complaintForm" style="display: none; margin-top: 15px;">
+                        <div style="margin-bottom: 10px;">
+                            <label style="color: #888; font-size: 0.8rem;">Wat ging er mis?</label>
+                            <select id="complaintReason" class="input-field" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #0a0a1a; color: #fff; margin-top: 5px;">
+                                <option value="">Selecteer een reden...</option>
+                                <option value="Te lang moeten wachten">Te lang moeten wachten</option>
+                                <option value="Chauffeur was onbeleefd">Chauffeur was onbeleefd</option>
+                                <option value="Chauffeur reed onveilig">Chauffeur reed onveilig</option>
+                                <option value="Voertuig was niet schoon">Voertuig was niet schoon</option>
+                                <option value="Te hoge prijs">Te hoge prijs</option>
+                                <option value="Anders">Anders</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="color: #888; font-size: 0.8rem;">Beschrijf uw ervaring</label>
+                            <textarea id="complaintText" rows="3" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #0a0a1a; color: #fff; margin-top: 5px;" placeholder="Uw feedback helpt ons te verbeteren..."></textarea>
+                        </div>
+                        <button class="btn btn-danger" style="margin-top: 10px;" onclick="submitRating()">Beoordeling Versturen</button>
+                    </div>
+                    
+                    <!-- Success Message -->
+                    <div id="ratingSuccess" style="display: none; text-align: center; color: #00f5d4; padding: 10px;">
+                        ✅ Bedankt voor uw beoordeling!
+                    </div>
+                </div>
+            </div></div>
 
 <!-- PROFILE MODAL -->
 <div class="overlay" id="overlay" onclick="closeModals()"></div>
@@ -883,7 +919,72 @@ async function saveProfile() {
         closeModals();
     } catch(e) { console.error(e); }
 }
+    // ================================================================
+    // ⭐ STAR RATING SYSTEM
+    // ================================================================
 
+    let selectedRating = 0;
+
+    function setRating(stars) {
+        selectedRating = stars;
+        
+        for (let i = 1; i <= 5; i++) {
+            const star = document.getElementById(`star${i}`);
+            if (i <= stars) {
+                star.style.color = '#ffbc00';
+            } else {
+                star.style.color = '#555';
+            }
+        }
+        
+        const complaintForm = document.getElementById('complaintForm');
+        if (stars <= 2) {
+            complaintForm.style.display = 'block';
+        } else {
+            complaintForm.style.display = 'none';
+        }
+    }
+
+    async function submitRating() {
+        if (!selectedRating) {
+            alert('Selecteer alstublieft een beoordeling.');
+            return;
+        }
+        
+        if (selectedRating <= 2) {
+            const reason = document.getElementById('complaintReason').value;
+            const text = document.getElementById('complaintText').value.trim();
+            
+            if (!reason) {
+                alert('Selecteer alstublieft een reden voor uw beoordeling.');
+                return;
+            }
+            
+            if (!text) {
+                alert('Beschrijf alstublieft uw ervaring.');
+                return;
+            }
+            
+            try {
+                const user = JSON.parse(localStorage.getItem('velox_user'));
+                
+                const { error } = await window.supabaseClient.from('complaints').insert([{
+                    passenger_id: user.id,
+                    driver_id: activeDriverId,
+                    ride_id: activeRideId,
+                    complaint_text: `${reason}: ${text}`,
+                    status: 'new'
+                }]);
+                
+                if (error) throw error;
+            } catch (e) {
+                console.error('Complaint error:', e);
+            }
+        }
+        
+        document.getElementById('ratingSection').style.display = 'none';
+        document.getElementById('ratingSuccess').style.display = 'block';
+    }
 async function openHistoryModal() {
     document.getElementById('profileModal').style.display = 'none';
     const user = JSON.parse(localStorage.getItem('velox_user'));
