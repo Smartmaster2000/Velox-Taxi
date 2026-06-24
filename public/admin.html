@@ -108,8 +108,8 @@
                                     <th>Chauffeur</th>
                                     <th>Status</th>
                                     <th>Fare (100%)</th>
-                                    <th style="color: #00f5d4;">Fee (8%)</th>
-                                    <th style="color: #ffbc00;">Netto (92%)</th>
+                                    <th style="color: #00f5d4;">Platform Fee (8%)</th>
+                                    <th style="color: #ffbc00;">Netto Chauffeur (92%)</th>
                                 </tr>
                             </thead>
                             <tbody id="ride-list"></tbody>
@@ -164,21 +164,18 @@
         document.addEventListener('DOMContentLoaded', async () => {
             const user = getUserFromStorage();
             
-            // ✅ FIXED: Allow access ONLY if role is exactly 'admin'
             if (user && user.role === 'admin') {
-                // Ensure UI reflects the Admin state immediately
                 document.getElementById('admin-badge').innerText = (user.name || 'Admin').toUpperCase() + ' • ADMIN';
                 
                 await loadConfig();
                 initMap();
                 await loadMetricsAndRides();
-                await loadDrivers();        // ← Loads drivers (ONLY ONCE)
-                await loadMetrics();        // ← ✅ ADD THIS
-                await loadActiveRides();    // ← ✅ ADD THIS
+                await loadDrivers();
+                await loadMetrics();
+                await loadActiveRides();
                 await loadComplaints();
                 subscribeToRealtimeEvents();
                 
-                // ✅ Polling fallback — refreshes every 10s
                 setInterval(async () => {
                     await loadMetricsAndRides();
                     await loadDrivers();
@@ -188,6 +185,7 @@
                 window.location.href = '/index.html';
             }
         });
+
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -203,8 +201,6 @@
                 if (config.mapboxToken) mapboxgl.accessToken = config.mapboxToken;
                 if (config.supabaseUrl && config.supabaseAnonKey && typeof supabase !== 'undefined') {
                     window.supabaseClient = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
-
-                    // ✅ Authenticate the Realtime WebSocket so RLS delivers events
                     const user = getUserFromStorage();
                     const session = user?.session;
                     if (session?.access_token && session?.refresh_token) {
@@ -221,7 +217,7 @@
             map = new mapboxgl.Map({
                 container: 'map',
                 style: 'mapbox://styles/mapbox/dark-v11',
-                center: [4.8952, 52.3702], // Amsterdam
+                center: [4.8952, 52.3702],
                 zoom: 12
             });
         }
@@ -246,7 +242,6 @@
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
 
-                // For chart
                 const hourlyData = { requested: {}, accepted: {}, completed: {} };
                 for(let i=0; i<24; i++) {
                     hourlyData.requested[i] = 0; hourlyData.accepted[i] = 0; hourlyData.completed[i] = 0;
@@ -263,7 +258,11 @@
 
                         if (r.status === 'requested') requests++;
                         if (r.status === 'accepted' || r.status === 'enroute') active++;
-                        if (r.status === 'completed' && isToday) todayRevenue += price;
+                        
+                        // ✅ Platform revenue = sum of platform_fee (8%)
+                        if (r.status === 'completed' && isToday) {
+                            todayRevenue += parseFloat(r.platform_fee || (price * 0.08));
+                        }
 
                         if (isToday) {
                             const hour = rideDate.getHours();
@@ -272,7 +271,7 @@
                             else if (r.status === 'accepted' || r.status === 'enroute') hourlyData.accepted[hour]++;
                         }
 
-                        if (idx < 50) { // Only show last 50 in table
+                        if (idx < 50) {
                             const fare = price;
                             const fee = parseFloat(r.platform_fee || (fare * 0.08));
                             const net = parseFloat(r.net_earnings || (fare - fee));
@@ -373,6 +372,7 @@
                 document.getElementById('stat-drivers').innerText = onlineCount;
             } catch (err) { console.error(err); }
         }
+
         async function loadMetrics() {
             if (!window.supabaseClient) return;
             try {
@@ -391,7 +391,7 @@
 
                 document.getElementById('active-rides-val').innerText = activeRides ? activeRides.length : 0;
                 
-                // ✅ Get today's revenue = SUM of platform_fee (8% commission)
+                // ✅ Get today's platform revenue (sum of platform_fee = 8%)
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 
@@ -406,13 +406,11 @@
                     return;
                 }
 
-                // ✅ Platform revenue = sum of platform_fee (NOT the full fare!)
+                // ✅ Platform revenue = sum of platform_fee (8% commission)
                 const totalFees = completedRides ? completedRides.reduce((sum, r) => sum + parseFloat(r.platform_fee || (r.price * 0.08)), 0) : 0;
-                
-                // ✅ Total rides completed today
                 const completedCount = completedRides ? completedRides.length : 0;
                 
-                document.getElementById('revenue-val').innerText = `€${totalFees.toFixed(2)}`;
+                document.getElementById('stat-revenue').innerText = `€${totalFees.toFixed(2)}`;
                 document.getElementById('completed-rides-val').innerText = completedCount;
                 
                 console.log('✅ Metrics loaded:', {
@@ -424,7 +422,7 @@
                 console.error('❌ Error in loadMetrics:', err);
             }
         }
-        }
+
         async function loadActiveRides() {
             if (!window.supabaseClient) return;
             try {
@@ -473,6 +471,7 @@
                 console.error('❌ Error in loadActiveRides:', err);
             }
         }
+
         async function loadComplaints() {
             if (!window.supabaseClient) return;
             try {
@@ -481,7 +480,7 @@
                     .select('*, passenger:profiles!complaints_passenger_id_fkey(name), driver:profiles!complaints_driver_id_fkey(name)')
                     .order('created_at', { ascending: false });
 
-                if (error) return; // Suppress for now to avoid multiple banners
+                if (error) return;
 
                 const list = document.getElementById('complaints-list');
                 list.innerHTML = '';
@@ -532,7 +531,7 @@
             if (!driver.current_lat || !driver.current_lng) return;
 
             const coords = [parseFloat(driver.current_lng), parseFloat(driver.current_lat)];
-            let color = '#ff4444'; // offline
+            let color = '#ff4444';
             if (driver.status === 'online') color = '#00f5d4';
             if (driver.status === 'busy') color = '#ffbc00';
 
