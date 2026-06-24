@@ -77,7 +77,7 @@
                 <div id="stat-active" style="font-size: 1.8rem; font-weight: 800; color: #9d4edd; margin-top: 8px;">0</div>
             </div>
             <div class="stat-card glass" style="border: 1px solid rgba(0, 245, 212, 0.3);">
-                <div style="color: #00f5d4; font-size: 0.9rem; font-weight: bold;">💰 Totale Omzet (Vandaag)</div>
+                <div style="color: #00f5d4; font-size: 0.9rem; font-weight: bold;">💰 Platform Inkomsten (Vandaag)</div>
                 <div id="stat-revenue" style="font-size: 1.8rem; font-weight: 800; color: #fff; margin-top: 8px;">€0.00</div>
             </div>
         </section>
@@ -389,16 +389,15 @@
                     return;
                 }
 
-                // ✅ Update the stats card
                 document.getElementById('active-rides-val').innerText = activeRides ? activeRides.length : 0;
                 
-                // ✅ Get today's revenue
+                // ✅ Get today's revenue = SUM of platform_fee (8% commission)
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 
                 const { data: completedRides, error: cErr } = await window.supabaseClient
                     .from('rides')
-                    .select('price')
+                    .select('price, platform_fee, net_earnings')
                     .eq('status', 'completed')
                     .gte('created_at', today.toISOString());
 
@@ -407,20 +406,24 @@
                     return;
                 }
 
-                const revenue = completedRides ? completedRides.reduce((sum, r) => sum + parseFloat(r.price || 0), 0) : 0;
-                document.getElementById('revenue-val').innerText = `€${revenue.toFixed(2)}`;
+                // ✅ Platform revenue = sum of platform_fee (NOT the full fare!)
+                const totalFees = completedRides ? completedRides.reduce((sum, r) => sum + parseFloat(r.platform_fee || (r.price * 0.08)), 0) : 0;
                 
-                // ✅ Update completed rides count
-                document.getElementById('completed-rides-val').innerText = completedRides ? completedRides.length : 0;
+                // ✅ Total rides completed today
+                const completedCount = completedRides ? completedRides.length : 0;
+                
+                document.getElementById('revenue-val').innerText = `€${totalFees.toFixed(2)}`;
+                document.getElementById('completed-rides-val').innerText = completedCount;
                 
                 console.log('✅ Metrics loaded:', {
                     activeRides: activeRides?.length || 0,
-                    revenue: revenue,
-                    completed: completedRides?.length || 0
+                    totalFees: totalFees,
+                    completed: completedCount
                 });
             } catch (err) {
                 console.error('❌ Error in loadMetrics:', err);
             }
+        }
         }
         async function loadActiveRides() {
             if (!window.supabaseClient) return;

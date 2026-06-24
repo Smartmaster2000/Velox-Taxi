@@ -225,10 +225,11 @@
             <div id="driver-map"></div>
 
             <button class="btn btn-danger" style="margin-top: 20px;" onclick="cancelRide()" id="cancelBtn">Rit Annuleren</button>
+            
+            <!-- ⭐ STAR RATING SYSTEM -->
             <div id="completedActions" class="hidden" style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
                 <button class="btn btn-primary" onclick="resetBooking()" id="newRideBtn">Nieuwe Rit Boeken</button>
                 
-                <!-- ⭐ Star Rating System -->
                 <div id="ratingSection" style="background: #1a1a3a; padding: 20px; border-radius: 16px; border: 1px solid #333;">
                     <div style="text-align: center; margin-bottom: 15px;">
                         <span style="color: #888; font-size: 0.9rem;">⭐ Hoe was uw rit?</span>
@@ -257,7 +258,7 @@
                         </div>
                         <div>
                             <label style="color: #888; font-size: 0.8rem;">Beschrijf uw ervaring</label>
-                            <textarea id="complaintText" rows="3" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #0a0a1a; color: #fff; margin-top: 5px;" placeholder="Uw feedback helpt ons te verbeteren..."></textarea>
+                            <textarea id="complaintTextRating" rows="3" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #333; background: #0a0a1a; color: #fff; margin-top: 5px;" placeholder="Uw feedback helpt ons te verbeteren..."></textarea>
                         </div>
                         <button class="btn btn-danger" style="margin-top: 10px;" onclick="submitRating()">Beoordeling Versturen</button>
                     </div>
@@ -267,7 +268,10 @@
                         ✅ Bedankt voor uw beoordeling!
                     </div>
                 </div>
-            </div></div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- PROFILE MODAL -->
 <div class="overlay" id="overlay" onclick="closeModals()"></div>
@@ -401,8 +405,6 @@ function checkAuth() {
     if (userData) {
         try {
             const user = JSON.parse(userData);
-            // ✅ FIXED: Block only if role is explicitly NOT 'passenger'
-            // 'passenger' is the only allowed role here
             if (user.role && user.role !== 'passenger') {
                 alert(`Toegang geweigerd. U bent een ${user.role}. Dit is de passagier app.`);
                 logoutUser(); return null;
@@ -430,8 +432,6 @@ async function loadConfig() {
         if (config.supabaseUrl && config.supabaseAnonKey && typeof supabase !== 'undefined') {
             window.supabaseClient = supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
 
-            // ✅ CRITICAL: authenticate the Realtime WebSocket connection
-            // Without setSession(), the WS connection is anonymous and RLS blocks all events
             const user = JSON.parse(localStorage.getItem('velox_user'));
             const session = user?.session;
             if (session?.access_token && session?.refresh_token) {
@@ -567,11 +567,9 @@ let rideStatusPollInterval = null;
 let lastKnownStatus = null;
 
 function subscribeToRide(rideId) {
-    // Clear any existing poll
     if (rideStatusPollInterval) clearInterval(rideStatusPollInterval);
     lastKnownStatus = 'requested';
 
-    // Poll every 3 seconds — reliable alternative to Realtime WebSocket
     rideStatusPollInterval = setInterval(async () => {
         try {
             const user = JSON.parse(localStorage.getItem('velox_user'));
@@ -593,7 +591,6 @@ function subscribeToRide(rideId) {
             const ride = await res.json();
             if (debugEl) debugEl.textContent = `✅ Poll OK | id: ${ride?.id?.slice(0,8)}... | status: ${ride?.status} | driver: ${ride?.driver_id?.slice(0,8) || 'none'}`;
 
-            // Only process if status actually changed
             if (!ride || ride.status === lastKnownStatus) return;
             lastKnownStatus = ride.status;
 
@@ -618,7 +615,6 @@ async function handleRideStatusChange(ride) {
         document.getElementById('search-loader').classList.add('hidden');
         statusMsg.textContent = '🚕 Chauffeur is onderweg naar u!';
 
-        // Show driver info card — fetch driver details
         const user = JSON.parse(localStorage.getItem('velox_user'));
         const token = user?.session?.access_token || '';
         try {
@@ -636,7 +632,6 @@ async function handleRideStatusChange(ride) {
                 document.getElementById('driverVehicle').textContent = data.vehicle_model || 'Standaard Voertuig';
                 document.getElementById('driverPlate').textContent = data.vehicle_plate || '--';
 
-                // Wire up call button
                 const callBtn = document.getElementById('callDriverBtn');
                 if (data.phone) {
                     callBtn.onclick = () => window.location.href = `tel:${data.phone}`;
@@ -646,7 +641,6 @@ async function handleRideStatusChange(ride) {
                 }
                 if (debugEl) debugEl.textContent = `✅ Chauffeur: ${driverName} | ${data.vehicle_model || ''} | ${data.vehicle_plate || ''}`;
             } else {
-                // Show card with placeholder if fetch fails
                 document.getElementById('driverInfo').classList.remove('hidden');
             }
         } catch (e) {
@@ -654,7 +648,6 @@ async function handleRideStatusChange(ride) {
             document.getElementById('driverInfo').classList.remove('hidden');
         }
 
-        // Start live map — wrapped so a Mapbox token error can't crash the whole handler
         try {
             initDriverMap();
         } catch (e) {
@@ -702,9 +695,8 @@ async function handleRideStatusChange(ride) {
 function initDriverMap() {
     const mapEl = document.getElementById('driver-map');
     mapEl.style.display = 'block';
-    if (statusMap) return; // already initialized
+    if (statusMap) return;
 
-    // Ensure token is set — loadConfig sets mapboxToken but may not have set accessToken yet
     if (mapboxToken && !mapboxgl.accessToken) mapboxgl.accessToken = mapboxToken;
     if (!mapboxgl.accessToken) {
         console.warn('Mapbox token not ready — map skipped');
@@ -720,7 +712,6 @@ function initDriverMap() {
     });
 
     statusMap.on('load', () => {
-        // Pickup pin
         if (pickupCoords) {
             const el = document.createElement('div');
             el.textContent = '📍';
@@ -728,7 +719,6 @@ function initDriverMap() {
             new mapboxgl.Marker({ element: el }).setLngLat(pickupCoords).addTo(statusMap);
         }
 
-        // Route line from driver → pickup
         statusMap.addSource('drv-route', {
             type: 'geojson',
             data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }
@@ -745,7 +735,6 @@ function initDriverMap() {
 
 async function startDriverLocationPolling(driverId) {
     if (driverLocPollInterval) clearInterval(driverLocPollInterval);
-    // Poll immediately, then every 5 seconds
     await pollDriverLocation(driverId);
     driverLocPollInterval = setInterval(() => pollDriverLocation(driverId), 5000);
 }
@@ -765,7 +754,6 @@ async function updateDriverOnMap(lng, lat) {
     if (!statusMap) return;
     const driverCoords = [lng, lat];
 
-    // Create or move driver marker
     if (driverMapMarker) {
         driverMapMarker.setLngLat(driverCoords);
     } else {
@@ -777,7 +765,6 @@ async function updateDriverOnMap(lng, lat) {
             .addTo(statusMap);
     }
 
-    // Draw route driver → pickup via Mapbox Directions API
     if (pickupCoords && mapboxToken) {
         try {
             const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${driverCoords.join(',')};${pickupCoords.join(',')}?access_token=${mapboxToken}&geometries=geojson&overview=full`;
@@ -788,7 +775,6 @@ async function updateDriverOnMap(lng, lat) {
                     type: 'Feature',
                     geometry: rd.routes[0].geometry
                 });
-                // Fit map to show driver + pickup
                 const coords = rd.routes[0].geometry.coordinates;
                 const bounds = coords.reduce(
                     (b, c) => b.extend(c),
@@ -796,14 +782,12 @@ async function updateDriverOnMap(lng, lat) {
                 );
                 statusMap.fitBounds(bounds, { padding: 50, maxZoom: 15 });
 
-                // Live ETA
                 const mins = Math.max(1, Math.ceil(rd.routes[0].duration / 60));
                 document.getElementById('etaDisplay').textContent = mins + ' min';
             }
         } catch (e) { console.error('Route draw error:', e); }
     }
 }
-
 
 function subscribeToDriverLocation(driverId) {
     if (!window.supabaseClient) return;
@@ -815,7 +799,6 @@ function subscribeToDriverLocation(driverId) {
             if (driver.current_lat && driver.current_lng) {
                 const driverCoords = [driver.current_lng, driver.current_lat];
                 
-                // Update or create Car Icon on Map
                 if (driverMarker) {
                     driverMarker.setLngLat(driverCoords);
                 } else {
@@ -857,12 +840,10 @@ async function cancelRide() {
 }
 
 function resetBooking() {
-    // Stop all polling
     if (rideStatusPollInterval) { clearInterval(rideStatusPollInterval); rideStatusPollInterval = null; }
     if (driverLocPollInterval)  { clearInterval(driverLocPollInterval);  driverLocPollInterval = null; }
     lastKnownStatus = null;
 
-    // Reset driver map
     document.getElementById('driver-map').style.display = 'none';
     if (statusMap) { statusMap.remove(); statusMap = null; }
     driverMapMarker = null;
@@ -919,72 +900,78 @@ async function saveProfile() {
         closeModals();
     } catch(e) { console.error(e); }
 }
-    // ================================================================
-    // ⭐ STAR RATING SYSTEM
-    // ================================================================
 
-    let selectedRating = 0;
+// ================================================================
+// ⭐ STAR RATING SYSTEM
+// ================================================================
 
-    function setRating(stars) {
-        selectedRating = stars;
-        
-        for (let i = 1; i <= 5; i++) {
-            const star = document.getElementById(`star${i}`);
-            if (i <= stars) {
-                star.style.color = '#ffbc00';
-            } else {
-                star.style.color = '#555';
-            }
-        }
-        
-        const complaintForm = document.getElementById('complaintForm');
-        if (stars <= 2) {
-            complaintForm.style.display = 'block';
+let selectedRating = 0;
+
+function setRating(stars) {
+    selectedRating = stars;
+    
+    for (let i = 1; i <= 5; i++) {
+        const star = document.getElementById(`star${i}`);
+        if (i <= stars) {
+            star.style.color = '#ffbc00';
         } else {
-            complaintForm.style.display = 'none';
+            star.style.color = '#555';
         }
     }
+    
+    const complaintForm = document.getElementById('complaintForm');
+    if (stars <= 2) {
+        complaintForm.style.display = 'block';
+    } else {
+        complaintForm.style.display = 'none';
+    }
+}
 
-    async function submitRating() {
-        if (!selectedRating) {
-            alert('Selecteer alstublieft een beoordeling.');
+async function submitRating() {
+    if (!selectedRating) {
+        alert('Selecteer alstublieft een beoordeling.');
+        return;
+    }
+    
+    if (selectedRating <= 2) {
+        const reason = document.getElementById('complaintReason').value;
+        const text = document.getElementById('complaintTextRating').value.trim();
+        
+        if (!reason) {
+            alert('Selecteer alstublieft een reden voor uw beoordeling.');
             return;
         }
         
-        if (selectedRating <= 2) {
-            const reason = document.getElementById('complaintReason').value;
-            const text = document.getElementById('complaintText').value.trim();
-            
-            if (!reason) {
-                alert('Selecteer alstublieft een reden voor uw beoordeling.');
-                return;
-            }
-            
-            if (!text) {
-                alert('Beschrijf alstublieft uw ervaring.');
-                return;
-            }
-            
-            try {
-                const user = JSON.parse(localStorage.getItem('velox_user'));
-                
-                const { error } = await window.supabaseClient.from('complaints').insert([{
-                    passenger_id: user.id,
-                    driver_id: activeDriverId,
-                    ride_id: activeRideId,
-                    complaint_text: `${reason}: ${text}`,
-                    status: 'new'
-                }]);
-                
-                if (error) throw error;
-            } catch (e) {
-                console.error('Complaint error:', e);
-            }
+        if (!text) {
+            alert('Beschrijf alstublieft uw ervaring.');
+            return;
         }
         
-        document.getElementById('ratingSection').style.display = 'none';
-        document.getElementById('ratingSuccess').style.display = 'block';
+        try {
+            const user = JSON.parse(localStorage.getItem('velox_user'));
+            
+            const { error } = await window.supabaseClient.from('complaints').insert([{
+                passenger_id: user.id,
+                driver_id: activeDriverId,
+                ride_id: activeRideId,
+                complaint_text: `${reason}: ${text}`,
+                status: 'new'
+            }]);
+            
+            if (error) throw error;
+        } catch (e) {
+            console.error('Complaint error:', e);
+        }
     }
+    
+    document.getElementById('ratingSection').style.display = 'none';
+    document.getElementById('ratingSuccess').style.display = 'block';
+}
+
+// ================================================================
+// PROFILE, HISTORY & COMPLAINTS (continued)
+// ================================================================
+
 async function openHistoryModal() {
     document.getElementById('profileModal').style.display = 'none';
     const user = JSON.parse(localStorage.getItem('velox_user'));
