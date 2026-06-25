@@ -12,7 +12,11 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Arial, sans-serif; background: #0a0a1a; color: #fff; }
         .container { max-width: 450px; margin: 0 auto; padding: 20px; }
-        .status-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 16px; background: #1a1a3a; border-radius: 16px; }
+        
+        .status-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 20px; padding: 16px; background: #1a1a3a; border-radius: 16px;
+        }
         .online-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; }
         .btn { padding: 10px 20px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
         .btn-primary { background: #00f5d4; color: #0a0a1a; }
@@ -21,15 +25,22 @@
         .btn-secondary:hover { background: #555; }
         .btn-danger { background: #ff4444; color: #fff; }
         .btn-success { background: #00f5d4; color: #0a0a1a; }
+        
         .earnings-card { padding: 24px; text-align: center; background: #1a1a3a; border-radius: 16px; margin-bottom: 20px; }
         .earnings-card .amount { font-size: 2.5rem; font-weight: 800; color: #00f5d4; }
         .earnings-card .stats { display: flex; justify-content: space-around; margin-top: 20px; }
         .earnings-card .stats div { text-align: center; cursor: pointer; }
         .earnings-card .stats .number { font-size: 1.5rem; font-weight: 700; }
         .earnings-card .stats .label { color: #888; font-size: 0.8rem; }
+        
         #map { height: 350px; width: 100%; border-radius: 16px; margin-bottom: 20px; }
+        
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; z-index: 90; }
-        .modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 90%; max-width: 400px; max-height: 80vh; overflow-y: auto; background: #1a1a3a; padding: 30px; border-radius: 20px; z-index: 100; display: none; border: 1px solid #333; }
+        .modal {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 90%; max-width: 400px; max-height: 80vh; overflow-y: auto;
+            background: #1a1a3a; padding: 30px; border-radius: 20px; z-index: 100; display: none; border: 1px solid #333;
+        }
         .modal h3 { color: #00f5d4; margin-bottom: 15px; }
         .modal .detail { display: flex; justify-content: space-between; margin: 10px 0; }
         .modal .detail .label { color: #888; }
@@ -37,8 +48,51 @@
         .btn-group button { flex: 1; padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
         .btn-decline { background: #333; color: #fff; }
         .btn-accept { background: #00f5d4; color: #0a0a1a; }
+        
         #active-ride-panel { display: none; padding: 20px; margin-top: 20px; background: #1a1a3a; border-radius: 16px; }
         #active-ride-panel .ride-detail { margin: 8px 0; font-size: 0.9rem; }
+        
+        /* ✅ Navigation Instructions with buttons */
+        #nav-instructions {
+            display: none;
+            background: #00f5d4;
+            color: #0a0a1a;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+        #nav-text {
+            margin-bottom: 10px;
+        }
+        .nav-btn-group {
+            display: flex;
+            gap: 10px;
+        }
+        .nav-btn-group button {
+            flex: 1;
+            padding: 8px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+        .nav-btn-google {
+            background: #fff;
+            color: #1a73e8;
+        }
+        .nav-btn-google:hover {
+            background: #e8f0fe;
+        }
+        .nav-btn-waze {
+            background: #fff;
+            color: #33ccff;
+        }
+        .nav-btn-waze:hover {
+            background: #e6f9ff;
+        }
+        
         .hidden { display: none !important; }
         .history-item { padding: 12px; border-bottom: 1px solid #333; }
         .status-badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
@@ -46,7 +100,7 @@
         .status-busy { background: rgba(255, 188, 0, 0.1); color: #ffbc00; }
         .status-offline { background: rgba(255, 68, 68, 0.1); color: #ff4444; }
         .input-field { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; }
-        #nav-instructions { background: #00f5d4; color: #0a0a1a; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-weight: bold; display: none; }
+        
         .btn-icon { display: flex; align-items: center; justify-content: center; gap: 8px; }
         .user-avatar { width: 40px; height: 40px; border-radius: 50%; background: #333; display: flex; justify-content: center; align-items: center; cursor: pointer; font-weight: bold; font-size: 1.2rem; color: #fff; }
     </style>
@@ -87,7 +141,16 @@
 
         <div id="active-ride-panel">
             <h3 id="job-title">🚗 Route naar Ophaallocatie</h3>
-            <div id="nav-instructions">⬆️ Volg de navigatie op de kaart...</div>
+            
+            <!-- ✅ Navigation Instructions with Google & Waze buttons -->
+            <div id="nav-instructions">
+                <div id="nav-text">⬆️ Volg de navigatie...</div>
+                <div class="nav-btn-group">
+                    <button class="nav-btn-google" onclick="openGoogleMaps()">🗺️ Google</button>
+                    <button class="nav-btn-waze" onclick="openWaze()">🧭 Waze</button>
+                </div>
+            </div>
+            
             <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 8px; margin-bottom: 15px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                     <div>
@@ -142,7 +205,9 @@
 
     <script src="app.js"></script>
     <script>
-        // ✅ This function gets the user and token correctly
+        // ================================================================
+        // TOKEN & USER HELPERS
+        // ================================================================
         function getAuthToken() {
             const userData = localStorage.getItem('velox_user');
             if (!userData) return null;
@@ -166,6 +231,36 @@
             }
         }
 
+        // ================================================================
+        // NAVIGATION COORDINATES (for Google & Waze)
+        // ================================================================
+        let navStartCoords = null;
+        let navEndCoords = null;
+
+        // ================================================================
+        // NAVIGATION FUNCTIONS
+        // ================================================================
+        function openGoogleMaps() {
+            if (!navStartCoords || !navEndCoords) {
+                alert('📍 No route available yet.');
+                return;
+            }
+            const url = `https://www.google.com/maps/dir/${navStartCoords[0]},${navStartCoords[1]}/${navEndCoords[0]},${navEndCoords[1]}/`;
+            window.open(url, '_blank');
+        }
+
+        function openWaze() {
+            if (!navEndCoords) {
+                alert('📍 No destination set yet.');
+                return;
+            }
+            const url = `https://www.waze.com/ul?ll=${navEndCoords[0]},${navEndCoords[1]}&navigate=yes`;
+            window.open(url, '_blank');
+        }
+
+        // ================================================================
+        // MAIN DRIVER LOGIC
+        // ================================================================
         let isOnline = false;
         let map, driverMarker, destinationMarker;
         let driverCoords = null;
@@ -181,7 +276,6 @@
                 await loadConfig();
                 await fetchDriverStats(user.id);
                 document.getElementById('avatar').innerText = user.name ? user.name.charAt(0).toUpperCase() : 'D';
-                // ✅ Auto go online for testing
                 if (!isOnline) {
                     toggleOnlineState(true);
                 }
@@ -216,16 +310,21 @@
                 });
                 if (res.ok) {
                     const data = await res.json();
+                    console.log('✅ Driver data:', data);
                     if (data.status === 'online' || data.status === 'busy') toggleOnlineState(true);
                     document.getElementById('rating-val').innerText = data.stats?.avgRating || '5.0';
                 }
                 
                 const { data: rides, error } = await window.supabaseClient
                     .from('rides')
-                    .select('price, platform_fee, net_earnings, created_at, rating')
+                    .select('price, platform_fee, net_earnings, created_at')
                     .eq('driver_id', driverId)
                     .eq('status', 'completed');
-                if (error) throw error;
+                
+                if (error) {
+                    console.error('❌ Error fetching rides:', error);
+                    return;
+                }
                 
                 let totalNet = 0, todayNet = 0;
                 const today = new Date(); today.setHours(0,0,0,0);
@@ -357,7 +456,6 @@
                 }
                 
                 console.log('📤 Accepting ride:', currentRequest.id);
-                console.log('🔑 Token:', token.substring(0, 20) + '...');
                 
                 const res = await fetch(`/api/rides/status`, {
                     method: 'POST',
@@ -410,8 +508,10 @@
             const btn = document.getElementById('job-action-btn');
             btn.innerText = 'Aangekomen bij Ophaallocatie';
             btn.className = 'btn btn-success';
+            
+            // ✅ Show navigation instructions
             document.getElementById('nav-instructions').style.display = 'block';
-            document.getElementById('nav-instructions').innerText = '📍 Volg de navigatie naar de ophaallocatie...';
+            document.getElementById('nav-text').innerText = '📍 Volg de navigatie naar de ophaallocatie...';
             calculateJobRoute([parseFloat(activeRide.pickup_lng), parseFloat(activeRide.pickup_lat)]);
         }
 
@@ -453,7 +553,7 @@
                 if (res.ok) {
                     activeRide.status = 'enroute';
                     document.getElementById('job-title').innerText = '🛣️ Route naar Bestemming';
-                    document.getElementById('nav-instructions').innerText = '🏁 Volg de navigatie naar de eindbestemming...';
+                    document.getElementById('nav-text').innerText = '🏁 Volg de navigatie naar de eindbestemming...';
                     btn.innerText = 'Rit Voltooien';
                     btn.className = 'btn btn-primary';
                     calculateJobRoute([parseFloat(activeRide.dropoff_lng), parseFloat(activeRide.dropoff_lat)]);
@@ -503,14 +603,25 @@
         async function calculateJobRoute(destination) {
             if (!driverCoords || !destination) return;
             try {
+                // ✅ Store coordinates for navigation buttons
+                navStartCoords = driverCoords;
+                navEndCoords = destination;
+                
                 const res = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${driverCoords[0]},${driverCoords[1]};${destination[0]},${destination[1]}?geometries=geojson&steps=true&access_token=${mapboxgl.accessToken}`);
                 const data = await res.json();
                 if (data.routes && data.routes.length > 0) {
                     const route = data.routes[0];
                     drawJobRoute(route.geometry);
+                    
+                    const navInstructions = document.getElementById('nav-instructions');
+                    const navText = document.getElementById('nav-text');
                     if (route.legs[0] && route.legs[0].summary) {
-                        document.getElementById('nav-instructions').innerText = `Via ${route.legs[0].summary} (${Math.ceil(route.duration / 60)} min)`;
+                        const duration = Math.ceil(route.duration / 60);
+                        const distance = (route.distance / 1000).toFixed(1);
+                        navInstructions.style.display = 'block';
+                        navText.innerText = `🚗 Via ${route.legs[0].summary} (${duration} min, ${distance} km)`;
                     }
+                    
                     if (destinationMarker) destinationMarker.remove();
                     destinationMarker = new mapboxgl.Marker({ color: '#ff5d8f' }).setLngLat(destination).addTo(map);
                     map.fitBounds(new mapboxgl.LngLatBounds().extend(driverCoords).extend(destination), { padding: 50 });
@@ -603,6 +714,8 @@
         window.closeModals = closeModals;
         window.handleLogout = handleLogout;
         window.callPassenger = callPassenger;
+        window.openGoogleMaps = openGoogleMaps;
+        window.openWaze = openWaze;
     </script>
 </body>
 </html>
