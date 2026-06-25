@@ -13,7 +13,7 @@
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.js"></script>
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.css" rel="stylesheet" />
     
-    <!-- ✅ Mapbox GL Directions Plugin -->
+    <!-- Mapbox GL Directions Plugin -->
     <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.3.0/mapbox-gl-directions.css" type="text/css" />
     <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.3.0/mapbox-gl-directions.js"></script>
     
@@ -44,11 +44,13 @@
         
         #map { height: 350px; width: 100%; border-radius: 16px; margin-bottom: 20px; }
         
-        /* ✅ Directions plugin overrides for dark theme */
+        /* Directions plugin dark theme overrides */
         .mapboxgl-ctrl-directions {
             background: #1a1a3a !important;
             border: 1px solid #333 !important;
             border-radius: 12px !important;
+            max-height: 300px !important;
+            overflow-y: auto !important;
         }
         .mapboxgl-ctrl-directions .mapboxgl-ctrl-geocoder {
             background: #1a1a3a !important;
@@ -89,7 +91,6 @@
         #active-ride-panel { display: none; padding: 20px; margin-top: 20px; background: #1a1a3a; border-radius: 16px; }
         #active-ride-panel .ride-detail { margin: 8px 0; font-size: 0.9rem; }
         
-        /* ✅ Navigation Instructions with buttons */
         #nav-instructions {
             display: none;
             background: #00f5d4;
@@ -296,6 +297,50 @@
         }
 
         // ================================================================
+        // ✅ SHOW MAPBOX DIRECTIONS ON THE MAP
+        // ================================================================
+        function showDirections(origin, destination) {
+            if (!origin || !destination) {
+                console.warn('⚠️ Missing origin or destination');
+                return;
+            }
+            
+            console.log('📍 Showing directions from', origin, 'to', destination);
+            
+            // Remove existing directions control
+            if (directionsControl) {
+                map.removeControl(directionsControl);
+                directionsControl = null;
+            }
+            
+            // Create and add the directions control
+            directionsControl = new MapboxDirections({
+                accessToken: mapboxgl.accessToken,
+                unit: 'metric',
+                profile: 'mapbox/driving',
+                controls: { instructions: true, profileSwitcher: false },
+                language: 'nl',
+                origin: origin,
+                destination: destination,
+                interactive: false
+            });
+            
+            map.addControl(directionsControl, 'top-left');
+            
+            // Fit the map to show the full route
+            setTimeout(() => {
+                try {
+                    const bounds = new mapboxgl.LngLatBounds()
+                        .extend(origin)
+                        .extend(destination);
+                    map.fitBounds(bounds, { padding: 60, maxZoom: 13 });
+                } catch (e) {
+                    console.warn('⚠️ Could not fit bounds:', e);
+                }
+            }, 500);
+        }
+
+        // ================================================================
         // MAIN DRIVER LOGIC
         // ================================================================
         let isOnline = false;
@@ -382,7 +427,6 @@
                 container: 'map', style: 'mapbox://styles/mapbox/dark-v11', center: defaultCoords, zoom: 14
             });
             
-            // ✅ Add navigation control
             map.addControl(new mapboxgl.NavigationControl());
             
             driverMarker = new mapboxgl.Marker({ color: '#00f5d4' }).setLngLat(defaultCoords).addTo(map);
@@ -530,7 +574,7 @@
         }
 
         // ================================================================
-        // ✅ ENTER ACTIVE JOB MODE — SHOW DIRECTIONS
+        // ✅ ENTER ACTIVE JOB MODE
         // ================================================================
         function enterActiveJobMode() {
             document.getElementById('stats-section').style.display = 'none';
@@ -553,53 +597,24 @@
             btn.innerText = 'Aangekomen bij Ophaallocatie';
             btn.className = 'btn btn-success';
             
-            // ✅ Set coordinates
-            navStartCoords = driverCoords;
-            navEndCoords = [parseFloat(activeRide.pickup_lng), parseFloat(activeRide.pickup_lat)];
-            
-            // ✅ Show Mapbox Directions
-            showDirections(navStartCoords, navEndCoords);
-            
-            // ✅ Show navigation buttons
-            document.getElementById('nav-instructions').style.display = 'block';
-            document.getElementById('nav-text').innerText = '📍 Volg de navigatie op de kaart...';
-        }
-
-        // ================================================================
-        // ✅ SHOW MAPBOX DIRECTIONS ON THE MAP
-        // ================================================================
-        function showDirections(origin, destination) {
-            if (!origin || !destination) return;
-            
-            console.log('📍 Showing directions from', origin, 'to', destination);
-            
-            // ✅ Remove existing directions control if it exists
-            if (directionsControl) {
-                map.removeControl(directionsControl);
-                directionsControl = null;
+            // ✅ Use driver's current location as origin
+            if (driverCoords) {
+                navStartCoords = driverCoords;
+                navEndCoords = [parseFloat(activeRide.pickup_lng), parseFloat(activeRide.pickup_lat)];
+                
+                console.log('📍 Driver location:', navStartCoords);
+                console.log('📍 Pickup location:', navEndCoords);
+                
+                // ✅ Show Mapbox Directions
+                showDirections(navStartCoords, navEndCoords);
+                
+                // ✅ Show navigation buttons
+                document.getElementById('nav-instructions').style.display = 'block';
+                document.getElementById('nav-text').innerText = '📍 Volg de navigatie op de kaart...';
+            } else {
+                console.warn('⚠️ Driver location not available yet');
+                document.getElementById('nav-text').innerText = '⏳ Locatie wordt opgehaald...';
             }
-            
-            // ✅ Create and add the directions control
-            directionsControl = new MapboxDirections({
-                accessToken: mapboxgl.accessToken,
-                unit: 'metric',
-                profile: 'mapbox/driving',
-                controls: { instructions: true, profileSwitcher: false },
-                language: 'nl',
-                origin: origin,
-                destination: destination,
-                interactive: false
-            });
-            
-            map.addControl(directionsControl, 'top-left');
-            
-            // ✅ Fit the map to show the full route
-            setTimeout(() => {
-                const bounds = new mapboxgl.LngLatBounds()
-                    .extend(origin)
-                    .extend(destination);
-                map.fitBounds(bounds, { padding: 60, maxZoom: 13 });
-            }, 500);
         }
 
         // ================================================================
@@ -612,7 +627,7 @@
         }
 
         // ================================================================
-        // HANDLE JOB ACTION (Arrive → Complete)
+        // HANDLE JOB ACTION
         // ================================================================
         async function handleJobAction() {
             const btn = document.getElementById('job-action-btn');
