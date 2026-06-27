@@ -328,6 +328,10 @@ let statusMap = null;
 let driverMapMarker = null;
 let driverLocPollInterval = null;
 
+// ✅ ETA tracking variables
+let etaInterval = null;
+let etaDriverId = null;
+
 const rates = { economy: 1.5, premium: 2.8 };
 
 // ================================================================
@@ -658,6 +662,9 @@ async function handleRideStatusChange(ride) {
         } catch (e) {
             console.error('Location poll start error (non-fatal):', e);
         }
+        
+        // ✅ Start ETA tracking
+        startETATracking(ride.driver_id);
     }
     else if (ride.status === 'enroute') {
         if (debugEl) debugEl.textContent = `🏃 Status: ONDERWEG — chauffeur is gearriveerd`;
@@ -669,6 +676,12 @@ async function handleRideStatusChange(ride) {
         if (debugEl) debugEl.textContent = `✅ Status: VOLTOOID`;
         clearInterval(rideStatusPollInterval); rideStatusPollInterval = null;
         clearInterval(driverLocPollInterval);  driverLocPollInterval = null;
+        // ✅ Clear ETA tracking
+        if (etaInterval) {
+            clearInterval(etaInterval);
+            etaInterval = null;
+        }
+        etaDriverId = null;
         updateStepper('com');
         statusMsg.textContent = 'Rit succesvol voltooid. Bedankt voor het reizen met Velox!';
         document.getElementById('driverInfo').classList.add('hidden');
@@ -680,6 +693,12 @@ async function handleRideStatusChange(ride) {
         if (debugEl) debugEl.textContent = `❌ Status: GEANNULEERD`;
         clearInterval(rideStatusPollInterval); rideStatusPollInterval = null;
         clearInterval(driverLocPollInterval);  driverLocPollInterval = null;
+        // ✅ Clear ETA tracking
+        if (etaInterval) {
+            clearInterval(etaInterval);
+            etaInterval = null;
+        }
+        etaDriverId = null;
         statusMsg.textContent = 'Rit is geannuleerd.';
         document.getElementById('search-loader').classList.add('hidden');
         document.getElementById('driver-map').style.display = 'none';
@@ -816,17 +835,56 @@ function subscribeToDriverLocation(driverId) {
         }).subscribe();
 }
 
-async function updateETA(driverLocation, passengerLocation) {
-    if (!driverLocation || !passengerLocation) return;
-    try {
-        const res = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${driverLocation.join(',')};${passengerLocation.join(',')}?access_token=${mapboxgl.accessToken}`);
-        const data = await res.json();
-        if (data.routes && data.routes.length > 0) {
-            const durationMins = Math.ceil(data.routes[0].duration / 60);
-            document.getElementById('etaDisplay').textContent = durationMins + ' min';
-        }
-    } catch(e) { console.error('ETA Update error', e); }
+// ================================================================
+// ✅ ETA TRACKING WITH MAPBOX
+// ================================================================
+
+function startETATracking(driverId) {
+    etaDriverId = driverId;
+    if (etaInterval) clearInterval(etaInterval);
+    
+    // ✅ Update ETA immediately
+    updateETA();
+    
+    // ✅ Then every 10 seconds
+    etaInterval = setInterval(updateETA, 10000);
 }
+
+async function updateETA() {
+    if (!etaDriverId || !pickupCoords) return;
+    
+    try {
+        // ✅ Get driver's current location
+        const { data: driver, error } = await window.supabaseClient
+            .from('drivers')
+            .select('current_lat, current_lng')
+            .eq('id', etaDriverId)
+            .single();
+            
+        if (error || !driver || !driver.current_lat || !driver.current_lng) {
+            console.warn('⚠️ No driver location yet');
+            return;
+        }
+        
+        const driverCoords = [driver.current_lng, driver.current_lat];
+        const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${driverCoords.join(',')};${pickupCoords.join(',')}?access_token=${mapboxToken}`;
+        
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        if (data.routes && data.routes.length > 0) {
+            const minutes = Math.ceil(data.routes[0].duration / 60);
+            document.getElementById('etaDisplay').textContent = `${minutes} min`;
+            console.log(`⏱️ ETA updated: ${minutes} min`);
+        }
+    } catch (e) {
+        console.warn('ETA update error:', e);
+    }
+}
+
+// ================================================================
+// CANCEL & RESET
+// ================================================================
 
 async function cancelRide() {
     if (!activeRideId) return;
@@ -843,6 +901,13 @@ function resetBooking() {
     if (rideStatusPollInterval) { clearInterval(rideStatusPollInterval); rideStatusPollInterval = null; }
     if (driverLocPollInterval)  { clearInterval(driverLocPollInterval);  driverLocPollInterval = null; }
     lastKnownStatus = null;
+    
+    // ✅ Clear ETA tracking
+    if (etaInterval) {
+        clearInterval(etaInterval);
+        etaInterval = null;
+    }
+    etaDriverId = null;
 
     document.getElementById('driver-map').style.display = 'none';
     if (statusMap) { statusMap.remove(); statusMap = null; }
