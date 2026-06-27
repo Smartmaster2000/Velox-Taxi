@@ -5,9 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Velox Driver</title>
     <link rel="stylesheet" href="styles.css">
+    
+    <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- Mapbox GL -->
     <script src="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.js"></script>
     <link href="https://api.mapbox.com/mapbox-gl-js/v3.1.2/mapbox-gl.css" rel="stylesheet" />
+    
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: Arial, sans-serif; background: #0a0a1a; color: #fff; }
@@ -52,7 +57,7 @@
         #active-ride-panel { display: none; padding: 20px; margin-top: 20px; background: #1a1a3a; border-radius: 16px; }
         #active-ride-panel .ride-detail { margin: 8px 0; font-size: 0.9rem; }
         
-        /* ✅ Navigation Instructions with buttons */
+        /* ✅ Navigation Instructions */
         #nav-instructions {
             display: none;
             background: #00f5d4;
@@ -103,6 +108,18 @@
         
         .btn-icon { display: flex; align-items: center; justify-content: center; gap: 8px; }
         .user-avatar { width: 40px; height: 40px; border-radius: 50%; background: #333; display: flex; justify-content: center; align-items: center; cursor: pointer; font-weight: bold; font-size: 1.2rem; color: #fff; }
+        
+        /* ✅ GPS status indicator */
+        #gps-status {
+            font-size: 0.7rem;
+            margin-left: 10px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            display: inline-block;
+        }
+        .gps-good { background: rgba(0, 245, 212, 0.2); color: #00f5d4; }
+        .gps-poor { background: rgba(255, 188, 0, 0.2); color: #ffbc00; }
+        .gps-bad { background: rgba(255, 68, 68, 0.2); color: #ff4444; }
     </style>
 </head>
 <body>
@@ -113,6 +130,7 @@
                 <div>
                     <span class="online-dot" id="status-dot" style="background: #ff4444;"></span>
                     <span id="status-text" style="font-weight: 600;">OFFLINE</span>
+                    <span id="gps-status" class="gps-bad">📍 GPS: Wachten...</span>
                 </div>
             </div>
             <div style="display: flex; gap: 10px; align-items: center;">
@@ -142,9 +160,8 @@
         <div id="active-ride-panel">
             <h3 id="job-title">🚗 Route naar Ophaallocatie</h3>
             
-            <!-- ✅ Navigation Instructions with Google & Waze buttons -->
             <div id="nav-instructions">
-                <div id="nav-text">⬆️ Volg de navigatie...</div>
+                <div id="nav-text">📍 Volg de navigatie op de kaart...</div>
                 <div class="nav-btn-group">
                     <button class="nav-btn-google" onclick="openGoogleMaps()">🗺️ Google</button>
                     <button class="nav-btn-waze" onclick="openWaze()">🧭 Waze</button>
@@ -232,17 +249,79 @@
         }
 
         // ================================================================
-        // NAVIGATION COORDINATES (for Google & Waze)
+        // NAVIGATION COORDINATES
         // ================================================================
         let navStartCoords = null;
         let navEndCoords = null;
+        let routeLayerAdded = false;
 
         // ================================================================
-        // NAVIGATION FUNCTIONS
+        // GPS TRACKING WITH FALLBACK
+        // ================================================================
+        let gpsWatchId = null;
+        let lastGpsUpdate = Date.now();
+        let gpsRetryCount = 0;
+
+        function updateGpsStatus(status, message) {
+            const el = document.getElementById('gps-status');
+            el.textContent = `📍 ${message}`;
+            el.className = `gps-${status}`;
+        }
+
+        function startGpsTracking() {
+            if (!navigator.geolocation) {
+                updateGpsStatus('bad', 'GPS niet beschikbaar');
+                return;
+            }
+
+            updateGpsStatus('poor', 'GPS: Zoeken...');
+
+            gpsWatchId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    // ✅ GPS working — update location
+                    driverCoords = [pos.coords.longitude, pos.coords.latitude];
+                    lastGpsUpdate = Date.now();
+                    gpsRetryCount = 0;
+                    
+                    updateGpsStatus('good', `GPS: ${driverCoords[0].toFixed(4)}, ${driverCoords[1].toFixed(4)}`);
+                    
+                    if (driverMarker) {
+                        driverMarker.setLngLat(driverCoords);
+                    }
+                    
+                    // ✅ If we have an active ride, update route
+                    if (activeRide && navEndCoords) {
+                        updateRouteOnMap(driverCoords, navEndCoords);
+                    }
+                },
+                (err) => {
+                    console.warn('⚠️ GPS error:', err.message);
+                    gpsRetryCount++;
+                    
+                    if (gpsRetryCount > 3) {
+                        updateGpsStatus('bad', 'GPS: Geen signaal');
+                    } else {
+                        updateGpsStatus('poor', `GPS: ${err.message}`);
+                    }
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+            );
+        }
+
+        function stopGpsTracking() {
+            if (gpsWatchId) {
+                navigator.geolocation.clearWatch(gpsWatchId);
+                gpsWatchId = null;
+            }
+            updateGpsStatus('bad', 'GPS: Uitgeschakeld');
+        }
+
+        // ================================================================
+        // NAVIGATION FUNCTIONS (Google Maps & Waze)
         // ================================================================
         function openGoogleMaps() {
             if (!navStartCoords || !navEndCoords) {
-                alert('📍 No route available yet.');
+                alert('📍 Geen route beschikbaar.');
                 return;
             }
             const url = `https://www.google.com/maps/dir/${navStartCoords[0]},${navStartCoords[1]}/${navEndCoords[0]},${navEndCoords[1]}/`;
@@ -251,11 +330,72 @@
 
         function openWaze() {
             if (!navEndCoords) {
-                alert('📍 No destination set yet.');
+                alert('📍 Geen bestemming ingesteld.');
                 return;
             }
             const url = `https://www.waze.com/ul?ll=${navEndCoords[0]},${navEndCoords[1]}&navigate=yes`;
             window.open(url, '_blank');
+        }
+
+        // ================================================================
+        // DRAW ROUTE ON MAP
+        // ================================================================
+        function drawRouteOnMap(geometry) {
+            // ✅ Remove existing route if any
+            if (map.getSource('route')) {
+                map.getSource('route').setData(geometry);
+                return;
+            }
+            
+            map.addSource('route', {
+                type: 'geojson',
+                data: geometry
+            });
+            
+            map.addLayer({
+                id: 'route',
+                type: 'line',
+                source: 'route',
+                paint: {
+                    'line-color': '#00f5d4',
+                    'line-width': 5,
+                    'line-opacity': 0.85,
+                    'line-dasharray': [2, 1]
+                }
+            });
+            
+            routeLayerAdded = true;
+            
+            // ✅ Fit map to show the route
+            const coordinates = geometry.coordinates;
+            if (coordinates && coordinates.length > 0) {
+                const bounds = coordinates.reduce((b, coord) => b.extend(coord), new mapboxgl.LngLatBounds(coordinates[0], coordinates[0]));
+                map.fitBounds(bounds, { padding: 50, maxZoom: 15 });
+            }
+        }
+
+        // ================================================================
+        // UPDATE ROUTE ON MAP (when driver moves)
+        // ================================================================
+        async function updateRouteOnMap(origin, destination) {
+            if (!origin || !destination) return;
+            
+            try {
+                const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${origin[0]},${origin[1]};${destination[0]},${destination[1]}?geometries=geojson&access_token=${mapboxgl.accessToken}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                if (data.routes && data.routes.length > 0) {
+                    const route = data.routes[0];
+                    drawRouteOnMap(route.geometry);
+                    
+                    const duration = Math.ceil(route.duration / 60);
+                    const distance = (route.distance / 1000).toFixed(1);
+                    document.getElementById('nav-text').innerText = `🚗 ${duration} min, ${distance} km`;
+                }
+            } catch (e) {
+                console.warn('⚠️ Route update error:', e);
+            }
         }
 
         // ================================================================
@@ -264,7 +404,6 @@
         let isOnline = false;
         let map, driverMarker, destinationMarker;
         let driverCoords = null;
-        let watchId = null;
         let activeRideChannel = null;
         let activeRideStateChannel = null;
         let currentRequest = null;
@@ -344,14 +483,13 @@
             map = new mapboxgl.Map({
                 container: 'map', style: 'mapbox://styles/mapbox/dark-v11', center: defaultCoords, zoom: 14
             });
+            
+            map.addControl(new mapboxgl.NavigationControl());
+            
             driverMarker = new mapboxgl.Marker({ color: '#00f5d4' }).setLngLat(defaultCoords).addTo(map);
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(pos => {
-                    driverCoords = [pos.coords.longitude, pos.coords.latitude];
-                    map.setCenter(driverCoords);
-                    driverMarker.setLngLat(driverCoords);
-                });
-            }
+            
+            // ✅ Start GPS tracking immediately
+            startGpsTracking();
         }
 
         function toggleStatus() { toggleOnlineState(!isOnline); }
@@ -364,11 +502,11 @@
             if (isOnline) {
                 dot.style.background = '#00f5d4'; text.innerHTML = 'ONLINE';
                 btn.innerHTML = 'Ga Offline'; btn.className = 'btn btn-secondary';
-                startLocationTracking(); subscribeToRequests();
+                subscribeToRequests();
             } else {
                 dot.style.background = '#ff4444'; text.innerHTML = 'OFFLINE';
                 btn.innerHTML = 'Ga Online'; btn.className = 'btn btn-primary';
-                stopLocationTracking(); unsubscribeFromRequests();
+                unsubscribeFromRequests();
             }
             if (driverCoords) {
                 try {
@@ -380,25 +518,6 @@
                     });
                 } catch (e) { console.error(e); }
             }
-        }
-
-        function startLocationTracking() {
-            if (navigator.geolocation) {
-                watchId = navigator.geolocation.watchPosition(async (pos) => {
-                    driverCoords = [pos.coords.longitude, pos.coords.latitude];
-                    if (driverMarker) driverMarker.setLngLat(driverCoords);
-                    const token = getAuthToken();
-                    fetch('/api/drivers/location', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                        body: JSON.stringify({ latitude: driverCoords[1], longitude: driverCoords[0] })
-                    }).catch(()=>{});
-                }, err => {}, { enableHighAccuracy: true });
-            }
-        }
-
-        function stopLocationTracking() {
-            if (watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
         }
 
         function subscribeToRequests() {
@@ -488,6 +607,9 @@
             }
         }
 
+        // ================================================================
+        // ✅ ENTER ACTIVE JOB MODE — START NAVIGATION
+        // ================================================================
         function enterActiveJobMode() {
             document.getElementById('stats-section').style.display = 'none';
             document.getElementById('active-ride-panel').style.display = 'block';
@@ -509,18 +631,37 @@
             btn.innerText = 'Aangekomen bij Ophaallocatie';
             btn.className = 'btn btn-success';
             
-            // ✅ Show navigation instructions
-            document.getElementById('nav-instructions').style.display = 'block';
-            document.getElementById('nav-text').innerText = '📍 Volg de navigatie naar de ophaallocatie...';
-            calculateJobRoute([parseFloat(activeRide.pickup_lng), parseFloat(activeRide.pickup_lat)]);
+            // ✅ Set navigation coordinates
+            if (driverCoords) {
+                navStartCoords = driverCoords;
+                navEndCoords = [parseFloat(activeRide.pickup_lng), parseFloat(activeRide.pickup_lat)];
+                
+                console.log('📍 Driver location:', navStartCoords);
+                console.log('📍 Pickup location:', navEndCoords);
+                
+                // ✅ Draw route on map
+                updateRouteOnMap(navStartCoords, navEndCoords);
+                
+                // ✅ Show navigation buttons
+                document.getElementById('nav-instructions').style.display = 'block';
+                document.getElementById('nav-text').innerText = '📍 Volg de navigatie op de kaart...';
+            } else {
+                document.getElementById('nav-text').innerText = '⏳ Locatie wordt opgehaald...';
+            }
         }
 
+        // ================================================================
+        // CALL PASSENGER
+        // ================================================================
         function callPassenger() {
             if (activeRide && activeRide.passenger_phone) {
                 window.location.href = `tel:${activeRide.passenger_phone}`;
             }
         }
 
+        // ================================================================
+        // HANDLE JOB ACTION (Arrive → Complete)
+        // ================================================================
         async function handleJobAction() {
             const btn = document.getElementById('job-action-btn');
             const token = getAuthToken();
@@ -553,10 +694,15 @@
                 if (res.ok) {
                     activeRide.status = 'enroute';
                     document.getElementById('job-title').innerText = '🛣️ Route naar Bestemming';
+                    
+                    // ✅ Update navigation to destination
+                    navStartCoords = driverCoords;
+                    navEndCoords = [parseFloat(activeRide.dropoff_lng), parseFloat(activeRide.dropoff_lat)];
+                    updateRouteOnMap(navStartCoords, navEndCoords);
+                    
                     document.getElementById('nav-text').innerText = '🏁 Volg de navigatie naar de eindbestemming...';
                     btn.innerText = 'Rit Voltooien';
                     btn.className = 'btn btn-primary';
-                    calculateJobRoute([parseFloat(activeRide.dropoff_lng), parseFloat(activeRide.dropoff_lat)]);
                 } else {
                     alert('❌ Fout bij starten rit: ' + data.error);
                 }
@@ -594,49 +740,23 @@
             document.getElementById('active-ride-panel').style.display = 'none';
             document.getElementById('nav-instructions').style.display = 'none';
             document.getElementById('stats-section').style.display = 'block';
-            if (map.getLayer('job_route')) map.removeLayer('job_route');
-            if (map.getSource('job_route')) map.removeSource('job_route');
+            
+            // ✅ Remove route from map
+            if (map.getLayer('route')) {
+                map.removeLayer('route');
+            }
+            if (map.getSource('route')) {
+                map.removeSource('route');
+            }
+            routeLayerAdded = false;
+            
             if (destinationMarker) destinationMarker.remove();
             activeRide = null;
         }
 
-        async function calculateJobRoute(destination) {
-            if (!driverCoords || !destination) return;
-            try {
-                // ✅ Store coordinates for navigation buttons
-                navStartCoords = driverCoords;
-                navEndCoords = destination;
-                
-                const res = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${driverCoords[0]},${driverCoords[1]};${destination[0]},${destination[1]}?geometries=geojson&steps=true&access_token=${mapboxgl.accessToken}`);
-                const data = await res.json();
-                if (data.routes && data.routes.length > 0) {
-                    const route = data.routes[0];
-                    drawJobRoute(route.geometry);
-                    
-                    const navInstructions = document.getElementById('nav-instructions');
-                    const navText = document.getElementById('nav-text');
-                    if (route.legs[0] && route.legs[0].summary) {
-                        const duration = Math.ceil(route.duration / 60);
-                        const distance = (route.distance / 1000).toFixed(1);
-                        navInstructions.style.display = 'block';
-                        navText.innerText = `🚗 Via ${route.legs[0].summary} (${duration} min, ${distance} km)`;
-                    }
-                    
-                    if (destinationMarker) destinationMarker.remove();
-                    destinationMarker = new mapboxgl.Marker({ color: '#ff5d8f' }).setLngLat(destination).addTo(map);
-                    map.fitBounds(new mapboxgl.LngLatBounds().extend(driverCoords).extend(destination), { padding: 50 });
-                }
-            } catch (e) { console.error(e); }
-        }
-
-        function drawJobRoute(geometry) {
-            if (map.getSource('job_route')) { map.getSource('job_route').setData(geometry); }
-            else {
-                map.addSource('job_route', { 'type': 'geojson', 'data': geometry });
-                map.addLayer({ 'id': 'job_route', 'type': 'line', 'source': 'job_route', 'paint': { 'line-color': '#00f5d4', 'line-width': 5 } });
-            }
-        }
-
+        // ================================================================
+        // PROFILE, HISTORY & COMPLAINTS
+        // ================================================================
         async function showProfile() {
             const token = getAuthToken();
             try {
@@ -704,6 +824,9 @@
             window.location.href = '/index.html';
         }
 
+        // ================================================================
+        // EXPOSE FUNCTIONS
+        // ================================================================
         window.toggleStatus = toggleStatus;
         window.rejectRequest = rejectRequest;
         window.acceptRequest = acceptRequest;
